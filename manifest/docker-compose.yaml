@@ -1,7 +1,0 @@
-version: '3.8'
-services:
-  go-template:
-    image: ${GOTEMPLATE:-gotemplate}
-    ports:
-      - "8080:8080"
-    command: ["/app"]
