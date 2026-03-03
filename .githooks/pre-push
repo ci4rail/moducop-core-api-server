@@ -1,0 +1,27 @@
+#!/bin/bash
+
+echo "Pre-push hook triggered"
+
+STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep "\.go$")
+
+# only lint if Go files have changed
+if [ "$STAGED_GO_FILES" = "" ]; then
+  exit 0
+fi
+
+# inform about failed linting or testing step
+function failed {
+  echo ''
+  echo -e "Linting or testing failed... You can not push!"
+  echo ''
+
+  exit 1
+}
+
+trap 'failed' ERR
+
+# Run linting
+make lint
+
+# Run tests
+make test
