@@ -75,6 +75,16 @@ docker: ## Builds docker image
 
 ci: lint-reports test-reports ## Executes lint and test and generates reports
 
+.PHONY: mocks
+mocks:
+	make -C mocks mocks
+
+.PHONY: test-mocks
+test-mocks:
+	make -C mocks test-mocks
+
+
+
 help: ## Shows the help
 	@echo 'Usage: make <OPTIONS> ... <TARGETS>'
 	@echo ''

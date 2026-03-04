@@ -29,8 +29,12 @@ type HeaderInfo struct {
 }
 
 type AppMetaData struct {
-	ProjectName string `json:"project_name"`
-	Version     string `json:"version"`
+	ApplicationName string   `json:"application_name"`
+	ProjectName     string   `json:"project_name"`
+	Images          []string `json:"images"`
+	Orchestrator    string   `json:"orchestrator"`
+	Platform        string   `json:"platform"`
+	Version         string   `json:"version"`
 }
 
 func ParseArtifactHeader(path string) (HeaderInfo, AppMetaData, error) {
@@ -220,8 +224,8 @@ func ParseAndExtractAppArtifact(path string, appManifestDir string) (HeaderInfo,
 	if len(dataTar) == 0 && len(dataTarGz) == 0 {
 		return info, metadata, fmt.Errorf("artifact missing data/0000.tar or data/0000.tar.gz")
 	}
-	if metadata.ProjectName == "" {
-		return info, metadata, fmt.Errorf("artifact missing project_name in headers/0000/meta-data")
+	if metadata.ApplicationName == "" && metadata.ProjectName == "" {
+		return info, metadata, fmt.Errorf("artifact missing application_name in headers/0000/meta-data")
 	}
 
 	if err := extractManifestTarFromData(dataTar, dataTarGz, appManifestDir); err != nil {
@@ -350,6 +354,7 @@ func extractManifestTarFromData(dataTar []byte, dataTarGz []byte, appManifestDir
 	}
 
 	var manifestsTar []byte
+	var manifestsTarGz []byte
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
@@ -361,17 +366,36 @@ func extractManifestTarFromData(dataTar []byte, dataTarGz []byte, appManifestDir
 			}
 			return fmt.Errorf("read data/0000.tar.gz: %w", err)
 		}
-		if h.Name == "manifests.tar" {
+		switch h.Name {
+		case "manifests.tar":
 			manifestsTar, err = io.ReadAll(tr)
 			if err != nil {
 				return fmt.Errorf("read manifests.tar: %w", err)
 			}
+		case "manifests.tar.gz":
+			manifestsTarGz, err = io.ReadAll(tr)
+			if err != nil {
+				return fmt.Errorf("read manifests.tar.gz: %w", err)
+			}
+		}
+		if len(manifestsTar) > 0 || len(manifestsTarGz) > 0 {
 			break
 		}
 	}
 
+	if len(manifestsTar) == 0 && len(manifestsTarGz) == 0 {
+		return fmt.Errorf("data/0000.tar missing manifests.tar(.gz)")
+	}
 	if len(manifestsTar) == 0 {
-		return fmt.Errorf("data/0000.tar.gz missing manifests.tar")
+		gr, err := gzip.NewReader(bytes.NewReader(manifestsTarGz))
+		if err != nil {
+			return fmt.Errorf("open manifests.tar.gz: %w", err)
+		}
+		defer gr.Close()
+		manifestsTar, err = io.ReadAll(gr)
+		if err != nil {
+			return fmt.Errorf("read manifests.tar.gz payload: %w", err)
+		}
 	}
 	return extractManifestTar(manifestsTar, appManifestDir)
 }

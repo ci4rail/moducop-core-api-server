@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/ci4rail/moducop-core-api-server/mocks/mockmender"
@@ -52,6 +53,14 @@ func main() {
 		if err := runShowIssue(); err != nil {
 			os.Exit(1)
 		}
+	case "err-inject":
+		if len(os.Args) != 3 {
+			usage()
+			os.Exit(2)
+		}
+		if err := runErrInject(os.Args[2]); err != nil {
+			os.Exit(1)
+		}
 	default:
 		usage()
 		os.Exit(2)
@@ -64,6 +73,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  mender-update commit")
 	fmt.Fprintln(os.Stderr, "  mender-update rollback")
 	fmt.Fprintln(os.Stderr, "  mender-update show-issue")
+	fmt.Fprintln(os.Stderr, "  mender-update err-inject <none|after-stop-old-containers|after-renaming-old-application-directory|after-extracting-new-application-before-starting-new-containers>")
 }
 
 func runInstall(_ context.Context, imagePath string) error {
@@ -72,14 +82,6 @@ func runInstall(_ context.Context, imagePath string) error {
 		return err
 	}
 	_, installed, trial := mockmender.Stage()
-	if st.Stage == installed || st.Stage == trial {
-		msg := "Operation now in progress: Update already in progress. Please commit or roll back first"
-		fmt.Printf("record_id=1 severity=error time=\"2026-Mar-03 07:09:26.999642\" name=\"Global\" msg=\"%s\"\n", msg)
-		fmt.Println("Installation failed. System not modified.")
-		fmt.Printf("Could not fulfill request: %s\n", msg)
-		return errors.New(msg)
-	}
-
 	if _, err := os.Stat(imagePath); err != nil {
 		name := filepath.Base(imagePath)
 		fmt.Printf("record_id=1 severity=error time=\"2026-Mar-03 07:05:21.952463\" name=\"Global\" msg=\"No such file or directory: Failed to open '%s' for reading\"\n", name)
@@ -109,8 +111,21 @@ func runInstall(_ context.Context, imagePath string) error {
 
 	switch info.Payloads[0].Type {
 	case string(mockmender.UpdateTypeRootfs):
+		if st.Stage == installed || st.Stage == trial {
+			msg := "Operation now in progress: Update already in progress. Please commit or roll back first"
+			fmt.Printf("record_id=1 severity=error time=\"2026-Mar-03 07:09:26.999642\" name=\"Global\" msg=\"%s\"\n", msg)
+			fmt.Println("Installation failed. System not modified.")
+			fmt.Printf("Could not fulfill request: %s\n", msg)
+			return errors.New(msg)
+		}
 		return installRootfs(&st, imagePath)
-	case string(mockmender.UpdateTypeApp):
+	case string(mockmender.UpdateTypeApp), "docker-compose":
+		if st.Stage == installed || st.Stage == trial {
+			msg := "Operation now in progress: Update already in progress. Please commit or roll back first"
+			fmt.Println("Installation failed. System not modified.")
+			fmt.Printf("Could not fulfill request: %s\n", msg)
+			return errors.New(msg)
+		}
 		return installApp(&st, imagePath, metadata)
 	default:
 		fmt.Println("record_id=1 severity=error time=\"2026-Mar-03 07:43:32.990506\" name=\"Global\" msg=\"Unsupported payload type\"")
@@ -163,22 +178,40 @@ func installRootfs(st *mockmender.State, imagePath string) error {
 }
 
 func installApp(st *mockmender.State, imagePath string, metadata mockmender.AppMetaData) error {
-	project := metadata.ProjectName
+	project := metadata.ApplicationName
 	if project == "" {
-		fmt.Println("record_id=1 severity=error time=\"2026-Mar-03 07:43:32.990506\" name=\"Global\" msg=\"Missing project_name in artifact metadata\"")
+		project = metadata.ProjectName
+	}
+	if project == "" {
+		fmt.Println("record_id=1 severity=error time=\"2026-Mar-03 07:43:32.990506\" name=\"Global\" msg=\"Missing application_name in artifact metadata\"")
 		fmt.Println("Installation failed. System not modified.")
-		return fmt.Errorf("missing project_name in artifact metadata")
+		return fmt.Errorf("missing application_name in artifact metadata")
+	}
+	if metadata.Orchestrator != "" && metadata.Orchestrator != "docker-compose" {
+		fmt.Println("record_id=1 severity=error time=\"2026-Mar-03 07:43:32.990506\" name=\"Global\" msg=\"Unsupported orchestrator\"")
+		fmt.Println("Installation failed. System not modified.")
+		return fmt.Errorf("unsupported orchestrator: %s", metadata.Orchestrator)
 	}
 
 	appPath := mockmender.AppPath(project)
 	prevProject := project + "-previous"
 	prevPath := mockmender.AppPath(prevProject)
+
+	// Simulate docker compose down for previous rollout before rename.
+	st.RunningContainers = mockmender.RemoveRunningContainersForProject(st.RunningContainers, project)
+	if err := maybeInjectedFailure(st, mockmender.ErrInjectAfterStopOldContainers); err != nil {
+		return err
+	}
+
 	if _, err := os.Stat(appPath); err == nil {
 		_ = os.RemoveAll(prevPath)
 		if err := os.Rename(appPath, prevPath); err != nil {
 			fmt.Printf("record_id=1 severity=error time=\"2026-Mar-03 07:05:21.952463\" name=\"Global\" msg=\"%s\"\n", err.Error())
 			fmt.Println("Installation failed. System not modified.")
 			fmt.Printf("Could not fulfill request: %s\n", err.Error())
+			return err
+		}
+		if err := maybeInjectedFailure(st, mockmender.ErrInjectAfterRenameOldAppDir); err != nil {
 			return err
 		}
 	}
@@ -195,10 +228,13 @@ func installApp(st *mockmender.State, imagePath string, metadata mockmender.AppM
 		fmt.Printf("Could not fulfill request: %s\n", err.Error())
 		return err
 	}
-	if len(info.Payloads) == 0 || info.Payloads[0].Type != string(mockmender.UpdateTypeApp) {
+	if len(info.Payloads) == 0 || (info.Payloads[0].Type != string(mockmender.UpdateTypeApp) && info.Payloads[0].Type != "docker-compose") {
 		fmt.Println("record_id=1 severity=error time=\"2026-Mar-03 07:43:32.990506\" name=\"Global\" msg=\"Unsupported payload type\"")
 		fmt.Println("Installation failed. System not modified.")
 		return fmt.Errorf("unsupported payload")
+	}
+	if err := maybeInjectedFailure(st, mockmender.ErrInjectAfterExtractBeforeStart); err != nil {
+		return err
 	}
 
 	running, err := mockmender.ComposeContainersFromManifest(appPath, project)
@@ -208,19 +244,23 @@ func installApp(st *mockmender.State, imagePath string, metadata mockmender.AppM
 		fmt.Printf("Could not fulfill request: %s\n", err.Error())
 		return err
 	}
+	st.RunningContainers = slices.Concat(st.RunningContainers, running)
 
-	prev := ""
-	if _, err := os.Stat(prevPath); err == nil {
-		prev = prevProject
+	for i := 1; i <= 5; i++ {
+		fmt.Printf("Progress: %d%%\n", i*20)
+		time.Sleep(1 * time.Second)
 	}
-	mockmender.SetInstalledApp(st, filepath.Base(imagePath), project, prev, running)
+
+	if _, err := os.Stat(prevPath); err == nil {
+		_ = os.RemoveAll(prevPath)
+	}
+
 	if err := mockmender.SaveState(*st); err != nil {
 		return err
 	}
 
-	fmt.Println("Installed, but not committed.")
-	fmt.Println("Use 'commit' to update, or 'rollback' to roll back the update.")
-	fmt.Printf("Installed app manifests to: %s\n", manifestPath)
+	fmt.Println("Update Module doesn't support rollback. Committing immediately.")
+	fmt.Println("Installed and committed.")
 	return nil
 }
 
@@ -245,13 +285,6 @@ func runCommit() error {
 		return nil
 	case installed:
 		switch st.PendingUpdateType {
-		case string(mockmender.UpdateTypeApp):
-			mockmender.CommitApp(&st)
-			if err := mockmender.SaveState(st); err != nil {
-				return err
-			}
-			fmt.Println("Committed.")
-			return nil
 		default:
 			mockmender.RollbackImmediate(&st)
 			if err := mockmender.SaveState(st); err != nil {
@@ -314,4 +347,35 @@ func runShowIssue() error {
 	}
 	fmt.Print(string(b))
 	return nil
+}
+
+func runErrInject(point string) error {
+	if !mockmender.IsValidErrInjectPoint(point) {
+		return fmt.Errorf("invalid err-inject point: %s", point)
+	}
+
+	st, err := mockmender.LoadState()
+	if err != nil {
+		return err
+	}
+	st.ErrorInjectPoint = point
+	if err := mockmender.SaveState(st); err != nil {
+		return err
+	}
+	if point == mockmender.ErrInjectNone {
+		fmt.Println("Error injection cleared.")
+	} else {
+		fmt.Printf("Error injection set to: %s\n", point)
+	}
+	return nil
+}
+
+func maybeInjectedFailure(st *mockmender.State, point string) error {
+	if st.ErrorInjectPoint != point {
+		return nil
+	}
+	if err := mockmender.SaveState(*st); err != nil {
+		return err
+	}
+	return fmt.Errorf("injected error at %s", point)
 }

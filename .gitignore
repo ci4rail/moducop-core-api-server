@@ -172,3 +172,5 @@ fabric.properties
 .idea/httpRequests
 
 mock-mender-state/
+
+venv/

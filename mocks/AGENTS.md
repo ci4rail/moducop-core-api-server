@@ -141,16 +141,16 @@ headers/0000/meta-data
 
 header-info looks like this:
 ```
-{"payloads":[{"type":"docker-compose"}],"artifact_provides":{"artifact_name":"nginx-demo-8f249b9"},"artifact_depends":{"device_type":["moducop-cpu01"]}}
+{"payloads":[{"type":"app"}],"artifact_provides":{"artifact_name":"app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9"},"artifact_depends":{"device_type":["moducop-cpu01"]}}
 ```
 headers/0000/meta-data:
-{"project_name":"nxginx-demo","version":"1"}
+{"application_name":"nginx-demo","images":["1d13701a5f9f3fb01aaa88cef2344d65b6b5bf6b7d9fa4cf0dca557a8d7702ba","25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659"],"orchestrator":"docker-compose","platform":"linux/arm64","version":"1.0"}
 
 data/0000.tar contains:
 images.tar.gz
-manifests.tar
+manifests.tar.gz
 
-manifests.tar contains:
+manifests.tar.gz contains:
 manifests/
 manifests/docker-compose.yaml
 manifests/.env
@@ -166,6 +166,31 @@ nxginx-demo-web-1       maintainer=NGINX Docker Maintainers <docker-maint@nginx.
 ```
 
 Important labels are only: com.docker.compose.project, and the labels added by the docker-compose file, e.g. software-version. Other labels can be ignored for the mock.
+
+#### Exact behavior of mender-update for application updates
+
+Successful output shall take at least 5 seconds and print progress every second. After successful installation, it should print
+```
+Update Module doesn't support rollback. Committing immediately.
+Installed and committed.
+```
+(no commit or reboot needed for application updates)
+
+If same version of the application is already installed, it should perform a normal installation.
+
+If an application OR rootfs update is already installed but not committed, it should print
+```
+Installation failed. System not modified.
+Could not fulfill request: Operation now in progress: Update already in progress. Please commit or roll back first
+```
+
+#### Error injection
+
+It shall be possible to inject errors into the mender-update command via an err-inject command.
+
+* after stopping old containers, mender-update shall exit
+* after renaming old application directory, mender-update shall exit
+* after extracting new application, but before starting new containers, mender-update shall exit
 
 
 ### docker command

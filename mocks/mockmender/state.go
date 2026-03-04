@@ -34,6 +34,7 @@ type State struct {
 	CommittedRootfs    string           `json:"committed_rootfs"`
 	CommittedIssuePath string           `json:"committed_issue_path"`
 	RunningContainers  []ContainerState `json:"running_containers"`
+	ErrorInjectPoint   string           `json:"error_inject_point"`
 }
 
 type ContainerState struct {
@@ -46,7 +47,14 @@ type UpdateType string
 const (
 	UpdateTypeNone   UpdateType = ""
 	UpdateTypeRootfs UpdateType = "rootfs-image"
-	UpdateTypeApp    UpdateType = "docker-compose"
+	UpdateTypeApp    UpdateType = "app"
+)
+
+const (
+	ErrInjectNone                    = ""
+	ErrInjectAfterStopOldContainers  = "after-stop-old-containers"
+	ErrInjectAfterRenameOldAppDir    = "after-renaming-old-application-directory"
+	ErrInjectAfterExtractBeforeStart = "after-extracting-new-application-before-starting-new-containers"
 )
 
 func StateDir() string {
@@ -292,4 +300,28 @@ func RestorePreviousApp(s *State) {
 
 func Stage() (idle, installed, trial string) {
 	return stageIdle, stageInstalled, stageBootedTrial
+}
+
+func IsValidErrInjectPoint(v string) bool {
+	switch v {
+	case ErrInjectNone, ErrInjectAfterStopOldContainers, ErrInjectAfterRenameOldAppDir, ErrInjectAfterExtractBeforeStart:
+		return true
+	default:
+		return false
+	}
+}
+
+func RemoveRunningContainersForProject(containers []ContainerState, project string) []ContainerState {
+	filtered := make([]ContainerState, 0, len(containers))
+	needle := "com.docker.compose.project=" + project
+	for _, c := range containers {
+		if c.Labels == needle {
+			continue
+		}
+		if strings.HasPrefix(c.Labels, needle+",") {
+			continue
+		}
+		filtered = append(filtered, c)
+	}
+	return filtered
 }
