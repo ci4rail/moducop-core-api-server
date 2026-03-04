@@ -19,8 +19,13 @@ func main() {
 	_, installed, trial := mockmender.Stage()
 	switch st.Stage {
 	case installed:
-		// First reboot after install: trial boot into new rootfs.
-		mockmender.TrialBoot(&st)
+		if st.PendingUpdateType == string(mockmender.UpdateTypeRootfs) {
+			// First reboot after rootfs install: trial boot into new rootfs.
+			mockmender.TrialBoot(&st)
+		} else {
+			// Non-rootfs pending updates are treated as failed on reboot if uncommitted.
+			mockmender.RollbackImmediate(&st)
+		}
 	case trial:
 		// If not committed and rebooted again, rollback.
 		mockmender.RollbackAfterFailedTrial(&st)
