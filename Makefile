@@ -83,8 +83,6 @@ mocks:
 test-mocks:
 	make -C mocks test-mocks
 
-
-
 help: ## Shows the help
 	@echo 'Usage: make <OPTIONS> ... <TARGETS>'
 	@echo ''

@@ -174,3 +174,5 @@ fabric.properties
 mock-mender-state/
 
 venv/
+
+results/

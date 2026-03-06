@@ -114,6 +114,8 @@ Shall simulate a system reboot. It should print "Rebooting..." and exit with cod
 
 If reboot is called with an installed but not committed update it should switch the pointer back to the old rootfs, simulating a failed update.
 
+If environment variable `MOCK_MENDER_KILL_PARENT` is set to `yes`, reboot should kill its parent process to simulate that a system reboot terminated the current process tree.
+
 ### mender-update for application updates
 
 On the real target, application updates are done with mender app module https://raw.githubusercontent.com/ci4rail/meta-ci4rail-bsp/refs/heads/scarthgap/recipes-mender/mender-docker-compose/files/app and app-sub-module "docker-compose" https://raw.githubusercontent.com/ci4rail/meta-ci4rail-bsp/refs/heads/scarthgap/recipes-mender/mender-docker-compose/files/docker-compose.
@@ -191,6 +193,13 @@ It shall be possible to inject errors into the mender-update command via an err-
 * after stopping old containers, mender-update shall exit
 * after renaming old application directory, mender-update shall exit
 * after extracting new application, but before starting new containers, mender-update shall exit
+
+If environment variable `MOCK_MENDER_KILL_PARENT` is set to `yes`, hitting an injected error shall additionally kill the parent process.
+
+After error injection in application update, the system should reject new updates with "Update already in progress". It shall be possible to commit the pending update, but this commit should leave the system in an inconsistent state.  
+
+The next application install after the commit should output: "Installation failed, and Update Module does not support rollback. System may be in an inconsistent state.". In the real system, the only way out of this situation is to remove all manifest folders data/mender-app/nginx-demo[-previous]. After that, the system should be back to normal and allow new updates.
+
 
 
 ### docker command

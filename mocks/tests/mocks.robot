@@ -40,7 +40,7 @@ Update shall be refused if update in progress
     Should Be Equal As Integers    ${result.rc}    1
     Should Contain    ${result.stdout}   Update already in progress
     # try to install app update, should also be refused
-    ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/nginx-demo-8f249b9.mender
+    ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
     Should Be Equal As Integers    ${result.rc}    1
     Should Contain    ${result.stdout}   Update already in progress
 
@@ -82,12 +82,44 @@ New Application Update Shall Pass
     Should Contain  ${result.stdout}    com.ci4rail.app.software-version=a895c3c
     
 Application Error Inject After Stop Old Containers
+    # ensure there is an existing deployed app that can become inconsistent
+    ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-a895c3c.mender
+    Should Be Equal As Integers    ${result.rc}    0
+
     ${result}=    Run Process   mender-update   err-inject    after-stop-old-containers
     Should Be Equal As Integers    ${result.rc}    0
 
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
-    Log To Console    ${result.stderr}
-    Log To Console    ${result.stdout}
+    Clear Error Injection
+
+    # no more containers should be running
+    ${result}=  Run Docker PS WithLabels
+    Should Not Contain  ${result.stdout}    nginx-demo-web-1
+    Should Not Contain  ${result.stdout}    com.docker.compose.project=nginx-demo
+
+    # try to install again, should be refused
+    ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
+    Should Be Equal As Integers    ${result.rc}    1
+    Log To Console   stdout: ${result.stdout}
+    Should Contain    ${result.stdout}   Update already in progress
+
+    # To get out of this situation, we need to commit the update, so that I can try again installation
+    ${result}=    Run Process   mender-update  commit
+    Should Be Equal As Integers    ${result.rc}    0
+    Log To Console  stdout: ${result.stdout}
+    Should Contain    ${result.stdout}    Installation failed, and Update Module does not support rollback. System may be in an inconsistent state.
+
+    # next install is blocked until stale app dirs are removed manually
+    ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
+    Should Be Equal As Integers    ${result.rc}    1
+    Should Contain    ${result.stdout}    Installation failed, and Update Module does not support rollback. System may be in an inconsistent state.
+
+    Run Keyword And Ignore Error    Remove Directory    ${VIRT_FS}/data/mender-app/nginx-demo    recursive=True
+    Run Keyword And Ignore Error    Remove Directory    ${VIRT_FS}/data/mender-app/nginx-demo-previous    recursive=True
+
+    ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
+    Should Be Equal As Integers    ${result.rc}    0
+    Should Contain    ${result.stdout}    Installed and committed.
 
 
 *** Keywords ***
@@ -99,10 +131,7 @@ Setup Environment
     Set Environment Variable    MOCK_MENDER_STATE_DIR     ${STATE_DIR}
 
 Clear Environment
-    ${result}=  Run Process   mender-update   err-inject   \
-    Log To Console    ${result.stderr}
-    Log To Console    ${result.stdout}
-
+    Clear Error Injection
 
 Run Docker PS WithLabels
     ${result}=    Run Process    docker  ps   --format  {{.Names}}\\t{{.Labels}}
@@ -110,3 +139,7 @@ Run Docker PS WithLabels
     Log To Console    ${result.stdout}
 
     RETURN    ${result}
+
+Clear Error Injection
+    ${result}=    Run Process   mender-update   err-inject   \
+    Should Be Equal As Integers    ${result.rc}    0

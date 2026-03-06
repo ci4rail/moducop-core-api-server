@@ -10,6 +10,10 @@ import (
 func main() {
 	fmt.Println("Rebooting...")
 
+	if mockmender.ShouldKillParent() {
+		_ = mockmender.KillParentProcess()
+	}
+
 	st, err := mockmender.LoadState()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

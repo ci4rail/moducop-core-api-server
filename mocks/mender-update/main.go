@@ -120,6 +120,9 @@ func runInstall(_ context.Context, imagePath string) error {
 		}
 		return installRootfs(&st, imagePath)
 	case string(mockmender.UpdateTypeApp), "docker-compose":
+		if err := failIfAppStateInconsistent(&st, metadata); err != nil {
+			return err
+		}
 		if st.Stage == installed || st.Stage == trial {
 			msg := "Operation now in progress: Update already in progress. Please commit or roll back first"
 			fmt.Println("Installation failed. System not modified.")
@@ -199,6 +202,10 @@ func installApp(st *mockmender.State, imagePath string, metadata mockmender.AppM
 
 	// Simulate docker compose down for previous rollout before rename.
 	st.RunningContainers = mockmender.RemoveRunningContainersForProject(st.RunningContainers, project)
+	if st.ErrorInjectPoint == mockmender.ErrInjectAfterStopOldContainers {
+		// Keep the update in-progress after injected failure at this point.
+		mockmender.SetInstalledApp(st, filepath.Base(imagePath), project, "", st.RunningContainers)
+	}
 	if err := maybeInjectedFailure(st, mockmender.ErrInjectAfterStopOldContainers); err != nil {
 		return err
 	}
@@ -285,6 +292,16 @@ func runCommit() error {
 		return nil
 	case installed:
 		switch st.PendingUpdateType {
+		case string(mockmender.UpdateTypeApp):
+			pendingProject := st.PendingAppProject
+			mockmender.CommitApp(&st)
+			st.InconsistentApp = pendingProject
+			if err := mockmender.SaveState(st); err != nil {
+				return err
+			}
+			fmt.Println("Committed.")
+			fmt.Println("Installation failed, and Update Module does not support rollback. System may be in an inconsistent state.")
+			return nil
 		default:
 			mockmender.RollbackImmediate(&st)
 			if err := mockmender.SaveState(st); err != nil {
@@ -377,5 +394,49 @@ func maybeInjectedFailure(st *mockmender.State, point string) error {
 	if err := mockmender.SaveState(*st); err != nil {
 		return err
 	}
+	if mockmender.ShouldKillParent() {
+		_ = mockmender.KillParentProcess()
+	}
 	return fmt.Errorf("injected error at %s", point)
+}
+
+func failIfAppStateInconsistent(st *mockmender.State, metadata mockmender.AppMetaData) error {
+	project := metadata.ApplicationName
+	if project == "" {
+		project = metadata.ProjectName
+	}
+	if project == "" || st.InconsistentApp == "" || st.InconsistentApp != project {
+		return nil
+	}
+
+	appPath := mockmender.AppPath(project)
+	prevPath := mockmender.AppPath(project + "-previous")
+	appExists, err := pathExists(appPath)
+	if err != nil {
+		return err
+	}
+	prevExists, err := pathExists(prevPath)
+	if err != nil {
+		return err
+	}
+
+	if appExists || prevExists {
+		msg := "Installation failed, and Update Module does not support rollback. System may be in an inconsistent state."
+		fmt.Println(msg)
+		return errors.New(msg)
+	}
+
+	st.InconsistentApp = ""
+	return mockmender.SaveState(*st)
+}
+
+func pathExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
 }

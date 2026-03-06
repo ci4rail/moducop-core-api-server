@@ -35,6 +35,7 @@ type State struct {
 	CommittedIssuePath string           `json:"committed_issue_path"`
 	RunningContainers  []ContainerState `json:"running_containers"`
 	ErrorInjectPoint   string           `json:"error_inject_point"`
+	InconsistentApp    string           `json:"inconsistent_app"`
 }
 
 type ContainerState struct {
