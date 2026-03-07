@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/ci4rail/moducop-core-api-server/internal/loglite"
 	"github.com/ci4rail/moducop-core-api-server/internal/manager/cpumanager"
@@ -13,23 +14,39 @@ import (
 const (
 	apiPrefix      = "/api/v1"
 	updateFilePath = "/data/core-api-server/updates/"
+	dirModeDefault = 0o755
+	readHeaderTO   = 5 * time.Second
+	readTO         = 30 * time.Second
+	writeTO        = 30 * time.Second
+	idleTO         = 60 * time.Second
 )
 
 type API struct {
-	cpuManager *cpumanager.CpuManager
+	cpuManager *cpumanager.CPUManager
 	logger     *loglite.Logger
 }
 
-func Start(address string, cpuManager *cpumanager.CpuManager, logLevel loglite.Level) {
+func Start(address string, cpuManager *cpumanager.CPUManager, logLevel loglite.Level) {
 	a := &API{
 		cpuManager: cpuManager,
 		logger:     loglite.New("server", os.Stdout, logLevel),
 	}
 	handler := a.routes()
-	ensureUpdateFilePath()
+	if err := ensureUpdateFilePath(); err != nil {
+		a.logger.Errorf("failed to create update file path: %v", err)
+		panic(err)
+	}
 	go func() {
 		a.logger.Infof("starting server on %s", address)
-		if err := http.ListenAndServe(address, handler); err != nil {
+		srv := &http.Server{
+			Addr:              address,
+			Handler:           handler,
+			ReadHeaderTimeout: readHeaderTO,
+			ReadTimeout:       readTO,
+			WriteTimeout:      writeTO,
+			IdleTimeout:       idleTO,
+		}
+		if err := srv.ListenAndServe(); err != nil {
 			a.logger.Errorf("server failed: %v", err)
 			panic(err)
 		}
@@ -37,7 +54,7 @@ func Start(address string, cpuManager *cpumanager.CpuManager, logLevel loglite.L
 }
 
 func ensureUpdateFilePath() error {
-	return os.MkdirAll(getUpdateFilePath(), 0755)
+	return os.MkdirAll(getUpdateFilePath(), dirModeDefault)
 }
 
 func getUpdateFilePath() string {

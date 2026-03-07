@@ -49,6 +49,7 @@ linters:
           - noctx
         path: _test\.go
     paths:
+      - mocks
       - dev
       - third_party$
       - builtin$
@@ -60,6 +61,7 @@ formatters:
   exclusions:
     generated: lax
     paths:
+      - mocks
       - dev
       - third_party$
       - builtin$

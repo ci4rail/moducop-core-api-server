@@ -176,3 +176,4 @@ mock-mender-state/
 venv/
 
 results/
+.cache/

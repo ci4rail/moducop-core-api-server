@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -19,7 +18,15 @@ import (
 const (
 	defaultServerAddress = ":8090"
 	persistentStatePath  = "/data/core-api-server/cpumanager-state.json"
+	exitCodeUsageError   = 2
+	dirModeDefault       = 0o755
 )
+
+type staticError string
+
+func (e staticError) Error() string { return string(e) }
+
+const errInvalidLogLevel staticError = "expected one of debug|info|warn|error|off"
 
 func main() {
 	serverAddress := flag.String("server.address", defaultServerAddress, "HTTP server listen address")
@@ -29,11 +36,11 @@ func main() {
 	logLevel, err := parseLogLevel(*logLevelFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "invalid --log.level: %v\n", err)
-		os.Exit(2)
+		os.Exit(exitCodeUsageError)
 	}
 
 	statePath := prefixfs.Path(persistentStatePath)
-	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(statePath), dirModeDefault); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create state directory: %v\n", err)
 		os.Exit(1)
 	}
@@ -64,6 +71,6 @@ func parseLogLevel(s string) (loglite.Level, error) {
 	case "off":
 		return loglite.Off, nil
 	default:
-		return loglite.Info, errors.New("expected one of debug|info|warn|error|off")
+		return loglite.Info, errInvalidLogLevel
 	}
 }

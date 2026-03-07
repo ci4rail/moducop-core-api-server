@@ -2,6 +2,7 @@ package execcli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -11,9 +12,11 @@ import (
 	"time"
 )
 
+const streamCount = 2
+
 // RunCommand executes the given command with arguments and returns its stdout, stderr, exit code and error (if any).
 func RunCommand(cmd string, timeout time.Duration, args ...string) (stdout string, stderr string, exitCode int, err error) {
-	c := exec.Command(cmd, args...)
+	c := exec.CommandContext(context.Background(), cmd, args...)
 	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} // separate process group
 
 	stdoutPipe, err := c.StdoutPipe()
@@ -31,7 +34,7 @@ func RunCommand(cmd string, timeout time.Duration, args ...string) (stdout strin
 
 	var outBuf, errBuf bytes.Buffer
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(streamCount)
 
 	go func() {
 		defer wg.Done()

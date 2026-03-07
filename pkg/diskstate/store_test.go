@@ -2,11 +2,16 @@ package diskstate
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+)
+
+const (
+	errCountMustBeNonNegative staticError = "count must be >= 0"
+	errCountMustBeMaxTen      staticError = "count must be <= 10"
 )
 
 type testState struct {
@@ -43,7 +48,7 @@ func TestStoreLoadMissingFile(t *testing.T) {
 
 	var out testState
 	err := s.Load(context.Background(), &out)
-	if !errors.Is(err, os.ErrNotExist) {
+	if !stderrors.Is(err, os.ErrNotExist) {
 		t.Fatalf("Load() error = %v, want os.ErrNotExist", err)
 	}
 }
@@ -93,7 +98,7 @@ func TestStoreSaveValidationFailureDoesNotWriteFile(t *testing.T) {
 	s := New[testState](path)
 	s.Validate = func(v *testState) error {
 		if v.Count < 0 {
-			return errors.New("count must be >= 0")
+			return errCountMustBeNonNegative
 		}
 		return nil
 	}
@@ -107,7 +112,7 @@ func TestStoreSaveValidationFailureDoesNotWriteFile(t *testing.T) {
 	}
 
 	_, statErr := os.Stat(path)
-	if !errors.Is(statErr, os.ErrNotExist) {
+	if !stderrors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("state file should not exist; Stat() error = %v", statErr)
 	}
 }
@@ -144,7 +149,7 @@ func TestStoreUpdateValidationFailureKeepsPreviousState(t *testing.T) {
 	s := New[testState](path)
 	s.Validate = func(v *testState) error {
 		if v.Count > 10 {
-			return errors.New("count must be <= 10")
+			return errCountMustBeMaxTen
 		}
 		return nil
 	}

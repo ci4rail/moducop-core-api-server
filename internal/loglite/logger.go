@@ -46,22 +46,24 @@ type Logger struct {
 	clock  func() time.Time
 }
 
+const callerSkip = 4
+
 // New creates a named logger writing to w.
 // Timestamp is included by this wrapper (so the underlying log.Logger uses flags=0).
-func New(name string, w io.Writer, min Level) *Logger {
+func New(name string, w io.Writer, minLevel Level) *Logger {
 	ll := log.New(w, "", 0) // we format everything ourselves
 	lg := &Logger{
 		name:  name,
 		l:     ll,
 		clock: time.Now,
 	}
-	lg.minLvl.Store(uint32(min))
+	lg.minLvl.Store(uint32(minLevel))
 	return lg
 }
 
-func (lg *Logger) SetLevel(min Level) { lg.minLvl.Store(uint32(min)) }
-func (lg *Logger) Level() Level       { return Level(lg.minLvl.Load()) }
-func (lg *Logger) Name() string       { return lg.name }
+func (lg *Logger) SetLevel(minLevel Level) { lg.minLvl.Store(uint32(minLevel)) }
+func (lg *Logger) Level() Level            { return Level(lg.minLvl.Load()) }
+func (lg *Logger) Name() string            { return lg.name }
 
 // Debugf/Infof/Warnf/Errorf
 func (lg *Logger) Debugf(format string, args ...any) { lg.printf(Debug, format, args...) }
@@ -76,8 +78,8 @@ func (lg *Logger) Warn(args ...any)  { lg.print(Warn, args...) }
 func (lg *Logger) Error(args ...any) { lg.print(Error, args...) }
 
 func (lg *Logger) Enabled(level Level) bool {
-	min := Level(lg.minLvl.Load())
-	return level >= min && min != Off
+	minLevel := Level(lg.minLvl.Load())
+	return level >= minLevel && minLevel != Off
 }
 
 func (lg *Logger) printf(level Level, format string, args ...any) {
@@ -85,7 +87,7 @@ func (lg *Logger) printf(level Level, format string, args ...any) {
 		return
 	}
 	msg := fmt.Sprintf(format, args...)
-	lg.output(level, msg, 4) // caller skip
+	lg.output(level, msg, callerSkip) // caller skip
 }
 
 func (lg *Logger) print(level Level, args ...any) {
@@ -93,7 +95,7 @@ func (lg *Logger) print(level Level, args ...any) {
 		return
 	}
 	msg := fmt.Sprint(args...)
-	lg.output(level, msg, 4) // caller skip
+	lg.output(level, msg, callerSkip) // caller skip
 }
 
 func (lg *Logger) output(level Level, msg string, skip int) {

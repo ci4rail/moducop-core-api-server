@@ -2,16 +2,16 @@ package diskstate
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
-	"time"
 )
 
 // Store persists a value of type T to a single file path.
@@ -23,6 +23,15 @@ type Store[T any] struct {
 	// Optional hooks
 	Validate func(v *T) error // called after load (and before save)
 }
+
+const fileModeOwnerRW = 0o600
+const bitsPerUint32 = 32
+
+type staticError string
+
+func (e staticError) Error() string { return string(e) }
+
+const errUnexpectedExtraJSONValue staticError = "unexpected extra JSON value"
 
 // New creates a new Store using the given target file path.
 // The directory must exist (or you can create it before calling New).
@@ -79,59 +88,7 @@ func (s *Store[T]) Save(ctx context.Context, v T) error {
 		}
 	}
 
-	dir := filepath.Dir(s.path)
-	base := filepath.Base(s.path)
-
-	// Create temp file in same directory so rename is atomic on POSIX.
-	tmpPath := filepath.Join(dir, fmt.Sprintf(".%s.tmp.%d.%d", base, os.Getpid(), randSuffix()))
-	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return fmt.Errorf("create temp: %w", err)
-	}
-
-	// Make sure we cleanup temp on any error.
-	cleanup := func(err error) error {
-		_ = f.Close()
-		_ = os.Remove(tmpPath)
-		return err
-	}
-
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ") // remove if you want smaller files
-	if err := enc.Encode(v); err != nil {
-		return cleanup(fmt.Errorf("encode temp: %w", err))
-	}
-
-	// Force file contents to disk.
-	if err := f.Sync(); err != nil {
-		return cleanup(fmt.Errorf("fsync temp: %w", err))
-	}
-
-	if err := f.Close(); err != nil {
-		return cleanup(fmt.Errorf("close temp: %w", err))
-	}
-
-	// Atomic replace:
-	// - On Unix, os.Rename replaces the target if it exists.
-	// - On Windows, os.Rename fails if target exists, so we use a swap strategy there.
-	if runtime.GOOS == "windows" {
-		if err := replaceFileWindows(tmpPath, s.path); err != nil {
-			_ = os.Remove(tmpPath)
-			return err
-		}
-	} else {
-		if err := os.Rename(tmpPath, s.path); err != nil {
-			_ = os.Remove(tmpPath)
-			return fmt.Errorf("rename into place: %w", err)
-		}
-	}
-
-	// Force directory entry update to disk (important for power-loss safety).
-	if err := syncDir(dir); err != nil {
-		return fmt.Errorf("fsync dir: %w", err)
-	}
-
-	return nil
+	return s.saveUnlocked(v)
 }
 
 // Update loads (or initializes) the state, runs fn under the store lock,
@@ -190,7 +147,7 @@ func (s *Store[T]) saveUnlocked(v T) error {
 	base := filepath.Base(s.path)
 
 	tmpPath := filepath.Join(dir, fmt.Sprintf(".%s.tmp.%d.%d", base, os.Getpid(), randSuffix()))
-	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	f, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, fileModeOwnerRW)
 	if err != nil {
 		return fmt.Errorf("create temp: %w", err)
 	}
@@ -241,19 +198,18 @@ func ensureEOF(dec *json.Decoder) error {
 		// e.g. syntax error in trailing junk
 		return err
 	}
-	return fmt.Errorf("unexpected extra JSON value")
+	return errUnexpectedExtraJSONValue
 }
 
 func randSuffix() int64 {
-	// Low-collision suffix for temp files.
-	// Seed once per process.
-	onceSeed.Do(func() {
-		rand.New(rand.NewSource(time.Now().UnixNano()))
-	})
-	return time.Now().UnixNano() ^ int64(os.Getpid()) ^ rand.Int63()
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err == nil {
+		high := int64(binary.LittleEndian.Uint32(b[:4]))
+		low := int64(binary.LittleEndian.Uint32(b[4:]))
+		return (high << bitsPerUint32) | low
+	}
+	return int64(os.Getpid())
 }
-
-var onceSeed sync.Once
 
 func syncDir(dir string) error {
 	d, err := os.Open(dir)

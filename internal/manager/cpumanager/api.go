@@ -79,7 +79,7 @@ func (MenderEvent) isCommand() {}
 
 // Ask sends a command to the manager's inbox and waits for the result on the reply channel. It returns an error
 // if the context is done before the command is sent or before the result is received.
-func Ask[T any](ctx context.Context, m *CpuManager, cmd command, reply <-chan Result[T]) (T, error) {
+func Ask[T any](ctx context.Context, m *CPUManager, cmd command, reply <-chan Result[T]) (T, error) {
 	var zero T
 
 	select {
