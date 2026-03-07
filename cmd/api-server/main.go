@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	defaultServerAddress = ":8080"
+	defaultServerAddress = ":8090"
 	persistentStatePath  = "/data/core-api-server/cpumanager-state.json"
 )
 
@@ -44,7 +44,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	server.Start(*serverAddress, cpuManager)
+	server.Start(*serverAddress, cpuManager, logLevel)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

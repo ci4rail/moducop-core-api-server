@@ -28,15 +28,15 @@ const (
 )
 
 type entity struct {
-	name         string
-	entityType   entityType
-	deployStatus DeployStatus
-	menderFile   string // "" if no update is in progress
+	Name         string
+	EntityType   entityType
+	DeployStatus DeployStatus
+	MenderFile   string // "" if no update is in progress
 }
 
 type persistenState struct {
-	menderState *menderPersistentState
-	entities    map[string]*entity // key: entity name, value: entity
+	MenderState menderPersistentState
+	Entities    map[string]*entity // key: entity name, value: entity
 }
 
 const (
@@ -46,7 +46,7 @@ const (
 func New(persistentPath string, logLevel loglite.Level) (*CpuManager, error) {
 	m := &CpuManager{
 		logger: loglite.New("cpumanager", os.Stdout, logLevel),
-		inbox:  make(chan command),
+		inbox:  make(chan command, 10),
 		quit:   make(chan struct{}),
 		store:  diskstate.New[persistenState](persistentPath),
 	}
@@ -56,23 +56,25 @@ func New(persistentPath string, logLevel loglite.Level) (*CpuManager, error) {
 		if !errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("failed to load persistent state: %w", err)
 		}
+		m.logger.Infof("Persistent state file does not exist, initializing new state")
 		// initialize empty state if file does not exist
 		m.state = persistenState{
-			entities: make(map[string]*entity),
+			Entities: make(map[string]*entity),
 		}
-		m.state.entities[coreOSEntity] = &entity{
-			name:         coreOSEntity,
-			entityType:   entityTypeCoreOs,
-			deployStatus: DeployStatus{Code: DeployStatusCodeNeverDeployed, Message: "CoreOS has never been deployed"},
+		m.state.Entities[coreOSEntity] = &entity{
+			Name:         coreOSEntity,
+			EntityType:   entityTypeCoreOs,
+			DeployStatus: DeployStatus{Code: DeployStatusCodeNeverDeployed, Message: "CoreOS has never been deployed"},
 		}
+		m.state.MenderState = menderPersistentState{
+			State:       menderStateIdle,
+			CurrentFile: "",
+		}
+		m.logger.Infof("Initialized state with %+v", m.state)
 		m.saveState()
 	}
-	if m.state.menderState == nil {
-		m.state.menderState = &menderPersistentState{state: menderStateIdle}
-	}
 
-	m.mender = newMenderManager(m.logger, *m.state.menderState, m.emitMenderEvent)
-	m.state.menderState = m.mender.persistentState()
+	m.mender = newMenderManager(m.logger, &m.state.MenderState, m.emitMenderEvent)
 	go m.loop()
 	return m, nil
 }
@@ -111,9 +113,20 @@ func (m *CpuManager) handleCommand(cmd command) {
 	case Reboot:
 		//m.handleReboot(c)
 	case MenderEvent:
-		//m.handleMenderEvent(c)
+		m.handleMenderEvent(c)
 	default:
 		m.logger.Warnf("Received unknown command: %T", cmd)
+	}
+}
+
+func (m *CpuManager) handleMenderEvent(cmd MenderEvent) {
+	m.logger.Infof("Handling mender event: %d", cmd.event.Code)
+
+	switch cmd.event.Code {
+	case menderEventJobFinished:
+		m.logger.Infof("Mender job finished with success=%v, message=%s", cmd.event.Success, cmd.event.Message)
+	default:
+		m.mender.HandleEvent(cmd.event)
 	}
 }
 
@@ -131,27 +144,27 @@ func (m *CpuManager) handleEntityUpdate(
 		reply <- Result[struct{}]{Err: fmt.Errorf("invalid entity name for CoreOS: %s", entityName)}
 	}
 
-	e, ok := m.state.entities[entityName]
+	e, ok := m.state.Entities[entityName]
 	if !ok {
 		// create new entity
-		m.state.entities[entityName] = &entity{
-			name:         entityName,
-			entityType:   entityType,
-			deployStatus: DeployStatus{Code: DeployStatusCodeNeverDeployed, Message: "Entity has never been deployed"},
-			menderFile:   "",
+		m.state.Entities[entityName] = &entity{
+			Name:         entityName,
+			EntityType:   entityType,
+			DeployStatus: DeployStatus{Code: DeployStatusCodeNeverDeployed, Message: "Entity has never been deployed"},
+			MenderFile:   "",
 		}
-		e = m.state.entities[entityName]
+		e = m.state.Entities[entityName]
 	}
-	e.menderFile = menderFile
+	e.MenderFile = menderFile
 
 	if !m.mender.IsIdle() {
 		m.logger.Infof("Received update command for entity %s, but mender is currently busy with another update", entityName)
-		e.deployStatus.Code = DeployStatusCodeWaiting
+		e.DeployStatus.Code = DeployStatusCodeWaiting
 		reply <- Result[struct{}]{}
 		return
 	}
 
-	err := m.mender.StartUpdateJob(menderFile, 10*time.Minute)
+	err := m.mender.StartUpdateJob(entityType, menderFile, 10*time.Minute)
 	if err != nil {
 		reply <- Result[struct{}]{Err: fmt.Errorf("failed to start mender update job for entity %s: %w", entityName, err)}
 		return

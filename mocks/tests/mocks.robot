@@ -8,7 +8,7 @@ Suite Teardown    Clear Environment
 
 *** Variables ***
 ${STATE_DIR}    ${EXECDIR}/tests/mock-mender-state
-${ASSET_DIR}    ${EXECDIR}/tests/assets
+${ASSET_DIR}    ${EXECDIR}/../../tests/assets
 ${VIRT_FS}      ${STATE_DIR}/fs
 
 *** Test Cases ***

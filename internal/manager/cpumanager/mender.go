@@ -3,6 +3,7 @@ package cpumanager
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -34,18 +35,19 @@ const (
 type menderEvent struct {
 	Code         menderEventCode
 	Success      bool
-	updateResult menderUpdateResult
+	UpdateResult menderUpdateResult
 	Message      string
 }
 
 type menderPersistentState struct {
-	state       menderState
-	currentFile string // "" if no update is in progress
+	State             menderState
+	CurrentFile       string     // "" if no update is in progress
+	CurrentEntityType entityType // valid if CurrentFile != ""
 }
 
 type menderManager struct {
 	logger    *loglite.Logger
-	state     menderPersistentState
+	state     *menderPersistentState
 	emitEvent func(menderEvent)
 }
 
@@ -65,7 +67,7 @@ const (
 var (
 	menderUpdateResultText = map[menderUpdateResult]string{
 		menderUpdateResultInstalledButNotCommited:                   "Installed, but not committed.",
-		menderUpdateResultInstalledAndCommited:                      "Installed and commited.",
+		menderUpdateResultInstalledAndCommited:                      "Installed and committed.",
 		menderUpdateResultCommited:                                  "Commited.",
 		menderUpdateResultInstallationFailedSystemNotModified:       "Installation failed. System not modified.",
 		menderUpdateResultInstallationFailedRolledBack:              "Installation failed. Rolled back modifications.",
@@ -79,7 +81,7 @@ var (
 	ErrMenderBusy = errors.New("mender is busy with another update")
 )
 
-func newMenderManager(logger *loglite.Logger, state menderPersistentState, emitEvent func(menderEvent)) *menderManager {
+func newMenderManager(logger *loglite.Logger, state *menderPersistentState, emitEvent func(menderEvent)) *menderManager {
 	return &menderManager{
 		logger:    logger,
 		state:     state,
@@ -87,16 +89,13 @@ func newMenderManager(logger *loglite.Logger, state menderPersistentState, emitE
 	}
 }
 
-func (m *menderManager) persistentState() *menderPersistentState {
-	return &m.state
-}
-
-func (m *menderManager) StartUpdateJob(file string, timeout time.Duration) error {
-	if m.state.state != menderStateIdle {
+func (m *menderManager) StartUpdateJob(entityType entityType, file string, timeout time.Duration) error {
+	if m.state.State != menderStateIdle {
 		return ErrMenderBusy
 	}
-	m.state.state = menderStateInstalling
-	m.state.currentFile = file
+	m.state.State = menderStateInstalling
+	m.state.CurrentFile = file
+	m.state.CurrentEntityType = entityType
 	m.runMenderInstallInBackGround(file, timeout)
 	return nil
 }
@@ -109,10 +108,40 @@ func (m *menderManager) runMenderInstallInBackGround(file string, timeout time.D
 		me := menderEvent{
 			Code:         menderEventInstallFinished,
 			Success:      menderUpdateResultIsSuccess(result),
-			updateResult: result,
+			UpdateResult: result,
 			Message:      fmt.Sprintf("stdout: %s, stderr: %s, err: %v", stdout, stderr, err),
 		}
-		m.logger.Infof("Mender update job finished: %s", me.Message)
+		m.logger.Infof("Mender install finished: %v", me)
+		m.emitEvent(me)
+	}()
+}
+
+func (m *menderManager) runMenderCommitInBackGround(timeout time.Duration) {
+	go func() {
+		stdout, stderr, _, err := execcli.RunCommand("mender-update", timeout, "commit")
+		result := m.menderUpdateResultFromInstallOutput(stdout, err)
+
+		me := menderEvent{
+			Code:         menderEventCommitFinished,
+			Success:      menderUpdateResultIsSuccess(result),
+			UpdateResult: result,
+			Message:      fmt.Sprintf("stdout: %s, stderr: %s, err: %v", stdout, stderr, err),
+		}
+		m.logger.Infof("Mender commit finished: %v", me)
+		m.emitEvent(me)
+	}()
+}
+
+func (m *menderManager) runRebootInBackGround(timeout time.Duration) {
+	go func() {
+		stdout, stderr, _, err := execcli.RunCommand("reboot", timeout)
+
+		me := menderEvent{
+			Code:    menderEventRebootFinished,
+			Success: err == nil,
+			Message: fmt.Sprintf("stdout: %s, stderr: %s, err: %v", stdout, stderr, err),
+		}
+		m.logger.Infof("Reboot finished: %v", me)
 		m.emitEvent(me)
 	}()
 }
@@ -145,11 +174,100 @@ func (m *menderManager) menderUpdateResultFromInstallOutput(stdout string, err e
 }
 
 func (m *menderManager) IsIdle() bool {
-	return m.state.state == menderStateIdle
+	return m.state.State == menderStateIdle
 }
 
 func (m *menderManager) HandleEvent(event menderEvent) {
+	m.logger.Debugf("Handling mender event: %d", event.Code)
+
+	switch m.state.State {
+	case menderStateInstalling:
+		m.handleInstallingEvent(event)
+	case menderStateRebooting:
+		m.handleRebootingEvent(event)
+	case menderStateCommitting:
+		m.handleCommittingEvent(event)
+	default:
+		m.logger.Warnf("Received mender event in unexpected state %d: %v", m.state.State, event)
+	}
+
+}
+
+func (m *menderManager) handleInstallingEvent(event menderEvent) {
 	switch event.Code {
 	case menderEventInstallFinished:
+		if event.Success {
+			if m.state.CurrentEntityType == entityTypeCoreOs {
+				m.state.State = menderStateRebooting
+				m.runRebootInBackGround(30 * time.Second)
+			} else {
+				if event.UpdateResult == menderUpdateResultInstalledAndCommited {
+					m.setIdle()
+					m.emitJobFinished(true, "")
+				} else if event.UpdateResult == menderUpdateResultInstalledButNotCommited {
+					m.state.State = menderStateCommitting
+				} else {
+					m.logger.Warnf("Received unexpected mender update result for successful install: %v", event.UpdateResult)
+					m.setIdle()
+					m.emitJobFinished(false, fmt.Sprintf("Unexpected mender update result: %v", event.UpdateResult))
+				}
+			}
+		} else {
+			m.setIdle()
+			m.emitJobFinished(false, fmt.Sprintf("Mender update failed: %s", event.Message))
+		}
+
+	default:
+		m.logger.Warnf("Received unexpected mender event code %d in installing state: %v", event.Code, event)
 	}
+}
+
+func (m *menderManager) handleRebootingEvent(event menderEvent) {
+	switch event.Code {
+	case menderEventRebootFinished:
+		if event.Success {
+			m.state.State = menderStateCommitting
+			m.runMenderCommitInBackGround(30 * time.Second)
+		} else {
+			m.setIdle()
+			m.emitJobFinished(false, fmt.Sprintf("Reboot failed: %s", event.Message))
+		}
+	}
+}
+
+func (m *menderManager) handleCommittingEvent(event menderEvent) {
+	switch event.Code {
+	case menderEventCommitFinished:
+		if event.Success {
+			m.setIdle()
+			m.emitJobFinished(true, "")
+		} else {
+			m.setIdle()
+			m.emitJobFinished(false, fmt.Sprintf("Mender commit failed: %s", event.Message))
+		}
+	default:
+		m.logger.Warnf("Received unexpected mender event code %d in committing state: %v", event.Code, event)
+	}
+}
+
+func (m *menderManager) setIdle() {
+	m.logger.Debugf("Setting mender state to idle. Current state: %+v", m.state)
+	// remove current file from disk, if it exists
+	if m.state.CurrentFile != "" {
+		err := os.Remove(m.state.CurrentFile)
+		if err != nil && !os.IsNotExist(err) {
+			m.logger.Warnf("Failed to remove mender update file %s: %v", m.state.CurrentFile, err)
+		}
+	}
+	m.state.CurrentFile = ""
+	m.state.State = menderStateIdle
+}
+
+func (m *menderManager) emitJobFinished(success bool, message string) {
+	m.logger.Debugf("Emitting mender job finished event. Success: %v, message: %s", success, message)
+	m.emitEvent(menderEvent{
+		Code:    menderEventJobFinished,
+		Success: success,
+		Message: message,
+	})
 }

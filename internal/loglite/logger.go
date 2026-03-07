@@ -85,7 +85,7 @@ func (lg *Logger) printf(level Level, format string, args ...any) {
 		return
 	}
 	msg := fmt.Sprintf(format, args...)
-	lg.output(level, msg, 3) // caller skip
+	lg.output(level, msg, 4) // caller skip
 }
 
 func (lg *Logger) print(level Level, args ...any) {
@@ -93,11 +93,12 @@ func (lg *Logger) print(level Level, args ...any) {
 		return
 	}
 	msg := fmt.Sprint(args...)
-	lg.output(level, msg, 3) // caller skip
+	lg.output(level, msg, 4) // caller skip
 }
 
 func (lg *Logger) output(level Level, msg string, skip int) {
-	ts := lg.clock().Format(time.RFC3339Nano)
+	ts := lg.clock().Format("2006-01-02T15:04:05.000Z07:00")
+
 	fileLine := callerFileLine(skip)
 
 	// Ensure exactly one line per call; if msg contains newlines, indent continuation lines.

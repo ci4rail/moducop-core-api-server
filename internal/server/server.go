@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/ci4rail/moducop-core-api-server/internal/loglite"
 	"github.com/ci4rail/moducop-core-api-server/internal/manager/cpumanager"
 	"github.com/ci4rail/moducop-core-api-server/internal/prefixfs"
 )
@@ -16,16 +17,20 @@ const (
 
 type API struct {
 	cpuManager *cpumanager.CpuManager
+	logger     *loglite.Logger
 }
 
-func Start(address string, cpuManager *cpumanager.CpuManager) {
+func Start(address string, cpuManager *cpumanager.CpuManager, logLevel loglite.Level) {
 	a := &API{
 		cpuManager: cpuManager,
+		logger:     loglite.New("server", os.Stdout, logLevel),
 	}
 	handler := a.routes()
 	ensureUpdateFilePath()
 	go func() {
+		a.logger.Infof("starting server on %s", address)
 		if err := http.ListenAndServe(address, handler); err != nil {
+			a.logger.Errorf("server failed: %v", err)
 			panic(err)
 		}
 	}()
@@ -41,22 +46,22 @@ func getUpdateFilePath() string {
 
 func (a *API) routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST "+apiPrefix+"/software/application/{application-name}", a.handleLoadApplication)
+	mux.HandleFunc("PUT "+apiPrefix+"/software/application/{applicationname}", a.handleLoadApplication)
 	return mux
 }
 
 func (a *API) handleLoadApplication(w http.ResponseWriter, r *http.Request) {
-	appName := r.PathValue("application-name")
+	appName := r.PathValue("applicationname")
 	if appName == "" {
 		http.Error(w, "application name is required", http.StatusBadRequest)
 		return
 	}
-
 	tmp, err := os.CreateTemp(getUpdateFilePath(), "app-*")
 	if err != nil {
 		http.Error(w, "failed to create temporary file: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	a.logger.Infof("received request to update application %s. Download to %s", appName, tmp.Name())
 
 	tmpPath := tmp.Name()
 	keepFile := false
@@ -79,18 +84,19 @@ func (a *API) handleLoadApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	reply := make(chan cpumanager.Result[struct{}], 1)
-	_, err = cpumanager.Ask(r.Context(), a.cpuManager, cpumanager.StartApplicationUpdate{
-		AppName: appName,
-		PathToMenderFile: tmpPath,
-		Reply:            reply,
-	},
-	reply,
+	_, err = cpumanager.Ask(r.Context(), a.cpuManager,
+		cpumanager.StartApplicationUpdate{
+			AppName:          appName,
+			PathToMenderFile: tmpPath,
+			Reply:            reply,
+		},
+		reply,
 	)
 	if err != nil {
 		http.Error(w, "failed to start application update: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
+	a.logger.Infof("started application update for %s", appName)
 	keepFile = true
 	w.WriteHeader(http.StatusAccepted)
 }
