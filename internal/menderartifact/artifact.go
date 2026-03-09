@@ -1,3 +1,5 @@
+// package menderartifact provides functions to read and parse Mender artifact files, 
+// specifically to extract version information from the artifact headers.
 package menderartifact
 
 import (
