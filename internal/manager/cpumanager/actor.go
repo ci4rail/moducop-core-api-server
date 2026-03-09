@@ -135,9 +135,11 @@ func (m *CPUManager) handleMenderEvent(cmd MenderEvent) {
 	case menderEventNone:
 		m.logger.Debugf("Ignoring no-op mender event")
 	case menderEventInstallFinished, menderEventRebootFinished, menderEventCommitFinished:
+		// pass low level events to mender manager
 		m.mender.HandleEvent(cmd.event)
 	case menderEventJobFinished:
 		m.logger.Infof("Mender job finished with success=%v, message=%s", cmd.event.Success, cmd.event.Message)
+		m.handleMenderJobFinished(cmd.event.Success, cmd.event.Message)
 	default:
 		m.logger.Warnf("Received unknown mender event code: %d", cmd.event.Code)
 	}
@@ -168,6 +170,12 @@ func (m *CPUManager) handleEntityUpdate(
 		}
 		e = m.state.Entities[entityName]
 	}
+	if e.DeployStatus.Code == DeployStatusCodeInProgress || e.DeployStatus.Code == DeployStatusCodeWaiting {
+		m.logger.Infof("Received update command for entity %s, but an update is already in progress or waiting", entityName)
+		reply <- Result[struct{}]{Err: fmt.Errorf("an update is already in progress or waiting for entity %s", entityName)}
+		return
+	}
+
 	e.MenderFile = menderFile
 
 	if !m.mender.IsIdle() {
@@ -176,12 +184,74 @@ func (m *CPUManager) handleEntityUpdate(
 		reply <- Result[struct{}]{}
 		return
 	}
-
-	err := m.mender.StartUpdateJob(entityType, menderFile, updateStartTimeout)
+	err := m.startEntityUpdate(e)
 	if err != nil {
-		reply <- Result[struct{}]{Err: fmt.Errorf("failed to start mender update job for entity %s: %w", entityName, err)}
+		m.logger.Error(err)
+		reply <- Result[struct{}]{Err: err}
 		return
 	}
 
 	reply <- Result[struct{}]{}
+}
+
+func (m *CPUManager) startEntityUpdate(e *entity) error {
+	e.DeployStatus.Code = DeployStatusCodeInProgress
+	err := m.mender.StartUpdateJob(e.EntityType, e.MenderFile, updateStartTimeout)
+	if err != nil {
+		e.DeployStatus.Code = DeployStatusCodeFailure
+		e.DeployStatus.Message = fmt.Sprintf("Failed to start update: %v", err)
+
+		return fmt.Errorf("failed to start mender update job for entity %s: %w", e.Name, err)
+	}
+	return nil
+}
+
+func (m *CPUManager) handleMenderJobFinished(success bool, message string) {
+	e := m.getEntityInProgress()
+	if e == nil {
+		m.logger.Warnf("Mender job finished with success=%v, message=%s, but no entity was marked as in progress", success, message)
+		return
+	}
+	// finish current update
+	m.finishEntityUpdate(e, success, message)
+	// start next waiting update
+	waiting := m.getEntityWaiting()
+	if waiting != nil {
+		m.logger.Infof("Starting next update for entity %s that was waiting", waiting.Name)
+		err := m.startEntityUpdate(waiting)
+		if err != nil {
+			m.logger.Error(err)
+		}
+	} else {
+		m.logger.Infof("No waiting updates, actor is now idle")
+	}
+}
+
+func (m *CPUManager) getEntityInProgress() *entity {
+	for _, e := range m.state.Entities {
+		if e.DeployStatus.Code == DeployStatusCodeInProgress {
+			return e
+		}
+	}
+	return nil
+}
+
+func (m *CPUManager) getEntityWaiting() *entity {
+	for _, e := range m.state.Entities {
+		if e.DeployStatus.Code == DeployStatusCodeWaiting {
+			return e
+		}
+	}
+	return nil
+}
+
+func (m *CPUManager) finishEntityUpdate(e *entity, success bool, message string) {
+	if success {
+		e.DeployStatus.Code = DeployStatusCodeSuccess
+		e.DeployStatus.Message = "Update deployed successfully"
+	} else {
+		e.DeployStatus.Code = DeployStatusCodeFailure
+		e.DeployStatus.Message = message
+	}
+	e.MenderFile = ""
 }
