@@ -48,15 +48,12 @@ func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 			Entities: make(map[string]*entity),
 		}
 		m.state.Entities[coreOSEntity] = newEntity(coreOSEntity, entityTypeCoreOs)
-		m.state.Entities[coreOSEntity].DeployStatus.Message = "CoreOS has never been deployed"
 		m.state.MenderState = menderPersistentState{
 			State:           menderStateIdle,
 			CurrentArtifact: "",
 		}
 		m.logger.Infof("Initialized state with %+v", m.state)
-		if err := m.saveState(); err != nil {
-			return nil, err
-		}
+		m.saveState()
 	}
 
 	m.mender = newMenderManager(m.logger, &m.state.MenderState, m.emitMenderEvent)
@@ -64,25 +61,23 @@ func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 	return m, nil
 }
 
-func (m *CPUManager) saveState() error {
+func (m *CPUManager) saveState()  {
 	err := m.store.Save(context.Background(), m.state)
 	if err != nil {
 		m.logger.Errorf("Failed to save state: %v", err)
 	}
-	return err
 }
 
 func (m *CPUManager) loop() {
 	for {
 		select {
 		case <-m.quit:
+			m.saveState(); 
 			return
 		case cmd := <-m.inbox:
 			m.handleCommand(cmd)
 		}
-		if err := m.saveState(); err != nil {
-			m.logger.Errorf("Failed to persist state after command: %v", err)
-		}
+		m.saveState(); 
 	}
 }
 
@@ -105,6 +100,7 @@ func (m *CPUManager) handleCommand(cmd command) {
 	}
 }
 
+// handleMenderEvent handles events emitted by the mender manager. 
 func (m *CPUManager) handleMenderEvent(cmd MenderEvent) {
 	m.logger.Infof("Handling mender event: %d", cmd.event.Code)
 
@@ -122,6 +118,8 @@ func (m *CPUManager) handleMenderEvent(cmd MenderEvent) {
 	}
 }
 
+// emitMenderEvent sends a mender event to the manager's inbox. 
+// This is used by the mender manager to notify about events.
 func (m *CPUManager) emitMenderEvent(event menderEvent) {
 	m.inbox <- MenderEvent{event: event}
 }
