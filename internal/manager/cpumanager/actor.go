@@ -17,20 +17,6 @@ const (
 	updateStartTimeout = 10 * time.Minute
 )
 
-type entityType int
-
-const (
-	entityTypeCoreOs entityType = iota
-	entityTypeApplication
-)
-
-type entity struct {
-	Name         string
-	EntityType   entityType
-	DeployStatus DeployStatus
-	MenderFile   string // "" if no update is in progress
-}
-
 type persistenState struct {
 	MenderState menderPersistentState
 	Entities    map[string]*entity // key: entity name, value: entity
@@ -61,11 +47,8 @@ func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 		m.state = persistenState{
 			Entities: make(map[string]*entity),
 		}
-		m.state.Entities[coreOSEntity] = &entity{
-			Name:         coreOSEntity,
-			EntityType:   entityTypeCoreOs,
-			DeployStatus: DeployStatus{Code: DeployStatusCodeNeverDeployed, Message: "CoreOS has never been deployed"},
-		}
+		m.state.Entities[coreOSEntity] = newEntity(coreOSEntity, entityTypeCoreOs)
+		m.state.Entities[coreOSEntity].DeployStatus.Message = "CoreOS has never been deployed"
 		m.state.MenderState = menderPersistentState{
 			State:       menderStateIdle,
 			CurrentFile: "",
@@ -159,12 +142,7 @@ func (m *CPUManager) handleEntityUpdate(
 
 	e, ok := m.state.Entities[entityName]
 	if !ok {
-		m.state.Entities[entityName] = &entity{
-			Name:         entityName,
-			EntityType:   entityType,
-			DeployStatus: DeployStatus{Code: DeployStatusCodeNeverDeployed, Message: "Entity has never been deployed"},
-			MenderFile:   "",
-		}
+		m.state.Entities[entityName] = newEntity(entityName, entityType)
 		e = m.state.Entities[entityName]
 	}
 	if e.DeployStatus.Code == DeployStatusCodeInProgress || e.DeployStatus.Code == DeployStatusCodeWaiting {
@@ -194,28 +172,6 @@ func (m *CPUManager) handleEntityUpdate(
 	reply <- Result[struct{}]{}
 }
 
-func (m *CPUManager) startEntityUpdate(e *entity) error {
-	e.DeployStatus.Code = DeployStatusCodeInProgress
-	err := m.mender.StartUpdateJob(e.EntityType, e.MenderFile, updateStartTimeout)
-	if err != nil {
-		e.DeployStatus.Code = DeployStatusCodeFailure
-		e.DeployStatus.Message = fmt.Sprintf("Failed to start update: %v", err)
-		if errors.Is(err, ErrMenderBusy) {
-			return WrapCodedError(
-				ErrCodeMenderBusy,
-				fmt.Sprintf("mender is busy, cannot start update for entity %s", e.Name),
-				err,
-			)
-		}
-		return WrapCodedError(
-			ErrCodeStartUpdateFailed,
-			fmt.Sprintf("failed to start mender update job for entity %s", e.Name),
-			err,
-		)
-	}
-	return nil
-}
-
 func (m *CPUManager) handleMenderJobFinished(success bool, message string) {
 	e := m.getEntityInProgress()
 	if e == nil {
@@ -235,33 +191,4 @@ func (m *CPUManager) handleMenderJobFinished(success bool, message string) {
 	} else {
 		m.logger.Infof("No waiting updates, actor is now idle")
 	}
-}
-
-func (m *CPUManager) getEntityInProgress() *entity {
-	for _, e := range m.state.Entities {
-		if e.DeployStatus.Code == DeployStatusCodeInProgress {
-			return e
-		}
-	}
-	return nil
-}
-
-func (m *CPUManager) getEntityWaiting() *entity {
-	for _, e := range m.state.Entities {
-		if e.DeployStatus.Code == DeployStatusCodeWaiting {
-			return e
-		}
-	}
-	return nil
-}
-
-func (m *CPUManager) finishEntityUpdate(e *entity, success bool, message string) {
-	if success {
-		e.DeployStatus.Code = DeployStatusCodeSuccess
-		e.DeployStatus.Message = "Update deployed successfully"
-	} else {
-		e.DeployStatus.Code = DeployStatusCodeFailure
-		e.DeployStatus.Message = message
-	}
-	e.MenderFile = ""
 }
