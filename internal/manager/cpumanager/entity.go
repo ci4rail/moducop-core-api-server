@@ -3,6 +3,8 @@ package cpumanager
 import (
 	"errors"
 	"fmt"
+
+	"github.com/ci4rail/moducop-core-api-server/internal/menderartifact"
 )
 
 type entityType int
@@ -13,17 +15,23 @@ const (
 )
 
 type entity struct {
-	Name         string
-	EntityType   entityType
-	DeployStatus DeployStatus
-	MenderFile   string // "" if no update is in progress
+	Name           string
+	EntityType     entityType
+	DeployStatus   DeployStatus
+	MenderArtifact string      // "" if no update is in progress
+	DeployingNV    nameVersion // the version that is being deployed, empty if no deployment in progress
+}
+
+type nameVersion struct {
+	Name    string
+	Version string
 }
 
 func newEntity(name string, entityType entityType) *entity {
 	e := &entity{
-		Name:         name,
-		DeployStatus: DeployStatus{Code: DeployStatusCodeNeverDeployed, Message: "Entity has never been deployed"},
-		MenderFile:   "",
+		Name:           name,
+		DeployStatus:   DeployStatus{Code: DeployStatusCodeNeverDeployed, Message: "Entity has never been deployed"},
+		MenderArtifact: "",
 	}
 
 	switch entityType {
@@ -38,6 +46,9 @@ func newEntity(name string, entityType entityType) *entity {
 	return e
 }
 
+// getEntityInProgress returns the entity that is currently being updated (DeployStatusCodeInProgress)
+// or nil if there is no such entity.
+// By design, only one entity can be in progress at a time, so this function returns as soon as it finds one.
 func (m *CPUManager) getEntityInProgress() *entity {
 	for _, e := range m.state.Entities {
 		if e.DeployStatus.Code == DeployStatusCodeInProgress {
@@ -47,6 +58,8 @@ func (m *CPUManager) getEntityInProgress() *entity {
 	return nil
 }
 
+// getEntityWaiting gets the next waiting entity or nil if there is no waiting entity. If there are multiple waiting entities,
+// it returns the first one found in the map iteration order (which is random).
 func (m *CPUManager) getEntityWaiting() *entity {
 	for _, e := range m.state.Entities {
 		if e.DeployStatus.Code == DeployStatusCodeWaiting {
@@ -58,7 +71,7 @@ func (m *CPUManager) getEntityWaiting() *entity {
 
 func (m *CPUManager) startEntityUpdate(e *entity) error {
 	e.DeployStatus.Code = DeployStatusCodeInProgress
-	err := m.mender.StartUpdateJob(e.EntityType, e.MenderFile, updateStartTimeout)
+	err := m.mender.StartUpdateJob(e.EntityType, e.MenderArtifact, updateStartTimeout)
 	if err != nil {
 		e.DeployStatus.Code = DeployStatusCodeFailure
 		e.DeployStatus.Message = fmt.Sprintf("Failed to start update: %v", err)
@@ -80,16 +93,75 @@ func (m *CPUManager) startEntityUpdate(e *entity) error {
 
 func (m *CPUManager) finishEntityUpdate(e *entity, success bool, message string) {
 	if success {
-		e.DeployStatus.Code = DeployStatusCodeSuccess
-		e.DeployStatus.Message = "Update deployed successfully"
+		deployed, err := e.isDeployed(e.DeployingNV)
+		if err != nil {
+			m.logger.Errorf("Failed to check if entity %s is deployed: %v", e.Name, err)
+			deployed = false
+		}
+		if deployed {
+			e.DeployStatus.Code = DeployStatusCodeSuccess
+			e.DeployStatus.Message = "Update deployed successfully"
+		} else {
+			e.DeployStatus.Code = DeployStatusCodeFailure
+			e.DeployStatus.Message = fmt.Sprintf("Mender reported success, but deployed version does not match expected version %s", e.DeployingNV)
+		}
 	} else {
 		e.DeployStatus.Code = DeployStatusCodeFailure
 		e.DeployStatus.Message = message
 	}
-	e.MenderFile = ""
+	e.MenderArtifact = ""
+	e.DeployingNV = nameVersion{}
 }
 
-func (e *entity) getDeployedVersion() string {
-	// TODO:
-	return ""
+// getDeployedVersion returns the currently deployed version for the given entity.
+// Returns nameVersion, error. "nameVersion.name" for applications is the same as the entity name
+func (e *entity) getDeployedVersion() (nameVersion, error) {
+
+	switch e.EntityType {
+	case entityTypeCoreOs:
+		name, version, err := coreOSVersionFromTargetFS()
+		if err != nil {
+			return nameVersion{}, fmt.Errorf("get version for CoreOS: %w", err)
+		}
+		return nameVersion{Name: name, Version: version}, nil
+	case entityTypeApplication:
+		version, err := appVersionFromTargetFS(e.Name)
+		if err != nil {
+			return nameVersion{}, fmt.Errorf("get version for application %s: %w", e.Name, err)
+		}
+		return nameVersion{Name: e.Name, Version: version}, nil
+	default:
+		return nameVersion{}, fmt.Errorf("unknown entity type: %v", e.EntityType)
+	}
+}
+
+// getVersionFromArtifact extracts the version information from the given artifact for the given entity.
+// Returns nameVersion, error. "nameVersion.name" for applications is the same as the entity name
+func (e *entity) getVersionFromArtifact(artifact string) (nameVersion, error) {
+	switch e.EntityType {
+	case entityTypeCoreOs:
+		name, version, err := menderartifact.CoreOSVersionFromArtifact(artifact)
+		if err != nil {
+			return nameVersion{}, fmt.Errorf("get version from artifact for CoreOS: %w", err)
+		}
+		return nameVersion{Name: name, Version: version}, nil
+	case entityTypeApplication:
+		version, err := menderartifact.AppVersionFromArtifact(artifact, e.Name)
+		if err != nil {
+			return nameVersion{}, fmt.Errorf("get version from artifact for application %s: %w", e.Name, err)
+		}
+		return nameVersion{Name: e.Name, Version: version}, nil
+	default:
+		return nameVersion{}, fmt.Errorf("unknown entity type: %v", e.EntityType)
+	}
+}
+
+// isDeployed checks if the given artifact is deployed for this entity
+// by comparing the version from the artifact with the currently deployed version.
+func (e *entity) isDeployed(expected nameVersion) (bool, error) {
+	deployedNV, err := e.getDeployedVersion()
+	if err != nil {
+		return false, fmt.Errorf("get deployed version: %w", err)
+	}
+	return deployedNV.Name == expected.Name && deployedNV.Version == expected.Version, nil
 }

@@ -50,8 +50,8 @@ func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 		m.state.Entities[coreOSEntity] = newEntity(coreOSEntity, entityTypeCoreOs)
 		m.state.Entities[coreOSEntity].DeployStatus.Message = "CoreOS has never been deployed"
 		m.state.MenderState = menderPersistentState{
-			State:       menderStateIdle,
-			CurrentFile: "",
+			State:           menderStateIdle,
+			CurrentArtifact: "",
 		}
 		m.logger.Infof("Initialized state with %+v", m.state)
 		if err := m.saveState(); err != nil {
@@ -129,9 +129,12 @@ func (m *CPUManager) emitMenderEvent(event menderEvent) {
 func (m *CPUManager) handleEntityUpdate(
 	entityName string,
 	entityType entityType,
-	menderFile string,
+	menderArtifact string,
 	reply chan Result[struct{}],
 ) {
+	var err error
+	var deployed bool
+
 	if entityType == entityTypeCoreOs && entityName != coreOSEntity {
 		reply <- Result[struct{}]{Err: NewCodedError(
 			ErrCodeInvalidCoreOSEntityName,
@@ -154,7 +157,31 @@ func (m *CPUManager) handleEntityUpdate(
 		return
 	}
 
-	e.MenderFile = menderFile
+	deployingNV, err := e.getVersionFromArtifact(menderArtifact)
+	if err != nil {
+		m.logger.Errorf("Failed to get version from artifact for entity %s: %v", entityName, err)
+		reply <- Result[struct{}]{Err: NewCodedError(
+			ErrCodeArtifactInvalid,
+			fmt.Sprintf("invalid artifact for entity %s: %v", entityName, err),
+		)}
+		return
+	}
+
+	if deployed, err = e.isDeployed(deployingNV); err != nil {
+		m.logger.Errorf("Failed to check if artifact is already deployed for entity %s: %v. Continue", entityName, err)
+		deployed = false
+	}
+	if deployed {
+		m.logger.Infof("Received update command for entity %s, but the same version is already deployed", entityName)
+		reply <- Result[struct{}]{Err: NewCodedError(
+			ErrCodeAlreadyDeployed,
+			fmt.Sprintf("the same version is already deployed for entity %s", entityName),
+		)}
+		return
+	}
+
+	e.MenderArtifact = menderArtifact
+	e.DeployingNV = deployingNV
 
 	if !m.mender.IsIdle() {
 		m.logger.Infof("Received update command for entity %s, but mender is currently busy with another update", entityName)
@@ -162,7 +189,7 @@ func (m *CPUManager) handleEntityUpdate(
 		reply <- Result[struct{}]{}
 		return
 	}
-	err := m.startEntityUpdate(e)
+	err = m.startEntityUpdate(e)
 	if err != nil {
 		m.logger.Error(err)
 		reply <- Result[struct{}]{Err: err}

@@ -41,7 +41,7 @@ type menderEvent struct {
 
 type menderPersistentState struct {
 	State             menderState
-	CurrentFile       string     // "" if no update is in progress
+	CurrentArtifact   string     // "" if no update is in progress
 	CurrentEntityType entityType // valid if CurrentFile != ""
 }
 
@@ -81,20 +81,20 @@ func newMenderManager(logger *loglite.Logger, state *menderPersistentState, emit
 	}
 }
 
-func (m *menderManager) StartUpdateJob(entityType entityType, file string, timeout time.Duration) error {
+func (m *menderManager) StartUpdateJob(entityType entityType, artifact string, timeout time.Duration) error {
 	if m.state.State != menderStateIdle {
 		return ErrMenderBusy
 	}
-	m.state.State = menderStateInstalling
-	m.state.CurrentFile = file
+	m.state.State = menderStateInstalling	
+	m.state.CurrentArtifact = artifact
 	m.state.CurrentEntityType = entityType
-	m.runMenderInstallInBackGround(file, timeout)
+	m.runMenderInstallInBackGround(artifact, timeout)
 	return nil
 }
 
-func (m *menderManager) runMenderInstallInBackGround(file string, timeout time.Duration) {
+func (m *menderManager) runMenderInstallInBackGround(artifact string, timeout time.Duration) {
 	go func() {
-		stdout, stderr, _, err := execcli.RunCommand("mender-update", timeout, "install", file)
+		stdout, stderr, _, err := execcli.RunCommand("mender-update", timeout, "install", artifact)
 		result := m.menderUpdateResultFromInstallOutput(stdout, err)
 
 		me := menderEvent{
@@ -276,13 +276,13 @@ func menderUpdateResultText(result menderUpdateResult) string {
 func (m *menderManager) setIdle() {
 	m.logger.Debugf("Setting mender state to idle. Current state: %+v", m.state)
 	// remove current file from disk, if it exists
-	if m.state.CurrentFile != "" {
-		err := os.Remove(m.state.CurrentFile)
+	if m.state.CurrentArtifact != "" {
+		err := os.Remove(m.state.CurrentArtifact)
 		if err != nil && !os.IsNotExist(err) {
-			m.logger.Warnf("Failed to remove mender update file %s: %v", m.state.CurrentFile, err)
+			m.logger.Warnf("Failed to remove mender update file %s: %v", m.state.CurrentArtifact, err)
 		}
 	}
-	m.state.CurrentFile = ""
+	m.state.CurrentArtifact = ""
 	m.state.State = menderStateIdle
 }
 

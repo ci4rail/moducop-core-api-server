@@ -12,7 +12,7 @@ func TestPersistentStateMarshalsEnumsAsStrings(t *testing.T) {
 	state := persistenState{
 		MenderState: menderPersistentState{
 			State:             menderStateInstalling,
-			CurrentFile:       "/tmp/update.mender",
+			CurrentArtifact:   "/tmp/update.mender",
 			CurrentEntityType: entityTypeApplication,
 		},
 		Entities: map[string]*entity{
@@ -23,7 +23,7 @@ func TestPersistentStateMarshalsEnumsAsStrings(t *testing.T) {
 					Code:    DeployStatusCodeInProgress,
 					Message: "running",
 				},
-				MenderFile: "/tmp/core.mender",
+				MenderArtifact: "/tmp/core.mender",
 			},
 		},
 	}

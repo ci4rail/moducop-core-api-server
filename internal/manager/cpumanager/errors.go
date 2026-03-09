@@ -10,6 +10,8 @@ const (
 	ErrCodeEntityUpdateInProgress  = "cpm-0002"
 	ErrCodeMenderBusy              = "cpm-0003"
 	ErrCodeStartUpdateFailed       = "cpm-0004"
+	ErrCodeAlreadyDeployed         = "cpm-0005"
+	ErrCodeArtifactInvalid         = "cpm-0006"
 )
 
 type CodedError interface {
