@@ -11,17 +11,11 @@ import (
 	"github.com/ci4rail/moducop-core-api-server/pkg/diskstate"
 )
 
-type staticError string
-
-func (e staticError) Error() string { return string(e) }
-
 const (
 	coreOSEntity       = "coreos"
 	inboxSize          = 10
 	updateStartTimeout = 10 * time.Minute
 )
-
-const errInvalidCoreOSEntityName staticError = "invalid entity name for CoreOS"
 
 type entityType int
 
@@ -156,7 +150,10 @@ func (m *CPUManager) handleEntityUpdate(
 	reply chan Result[struct{}],
 ) {
 	if entityType == entityTypeCoreOs && entityName != coreOSEntity {
-		reply <- Result[struct{}]{Err: fmt.Errorf("%w: %s", errInvalidCoreOSEntityName, entityName)}
+		reply <- Result[struct{}]{Err: NewCodedError(
+			ErrCodeInvalidCoreOSEntityName,
+			fmt.Sprintf("invalid entity name for CoreOS: %s", entityName),
+		)}
 		return
 	}
 
@@ -172,7 +169,10 @@ func (m *CPUManager) handleEntityUpdate(
 	}
 	if e.DeployStatus.Code == DeployStatusCodeInProgress || e.DeployStatus.Code == DeployStatusCodeWaiting {
 		m.logger.Infof("Received update command for entity %s, but an update is already in progress or waiting", entityName)
-		reply <- Result[struct{}]{Err: fmt.Errorf("an update is already in progress or waiting for entity %s", entityName)}
+		reply <- Result[struct{}]{Err: NewCodedError(
+			ErrCodeEntityUpdateInProgress,
+			fmt.Sprintf("an update is already in progress or waiting for entity %s", entityName),
+		)}
 		return
 	}
 
@@ -200,8 +200,18 @@ func (m *CPUManager) startEntityUpdate(e *entity) error {
 	if err != nil {
 		e.DeployStatus.Code = DeployStatusCodeFailure
 		e.DeployStatus.Message = fmt.Sprintf("Failed to start update: %v", err)
-
-		return fmt.Errorf("failed to start mender update job for entity %s: %w", e.Name, err)
+		if errors.Is(err, ErrMenderBusy) {
+			return WrapCodedError(
+				ErrCodeMenderBusy,
+				fmt.Sprintf("mender is busy, cannot start update for entity %s", e.Name),
+				err,
+			)
+		}
+		return WrapCodedError(
+			ErrCodeStartUpdateFailed,
+			fmt.Sprintf("failed to start mender update job for entity %s", e.Name),
+			err,
+		)
 	}
 	return nil
 }

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -12,18 +13,29 @@ import (
 )
 
 const (
-	apiPrefix      = "/api/v1"
-	updateFilePath = "/data/core-api-server/updates/"
-	dirModeDefault = 0o755
-	readHeaderTO   = 5 * time.Second
-	readTO         = 30 * time.Second
-	writeTO        = 30 * time.Second
-	idleTO         = 60 * time.Second
+	apiPrefix                   = "/api/v1"
+	updateFilePath              = "/data/core-api-server/updates/"
+	dirModeDefault              = 0o755
+	readHeaderTO                = 5 * time.Second
+	readTO                      = 30 * time.Second
+	writeTO                     = 30 * time.Second
+	idleTO                      = 60 * time.Second
+	errCodeBadRequest           = "gen-0001"
+	errCodeCreateTempFailed     = "gen-0002"
+	errCodeReadBodyFailed       = "gen-0003"
+	errCodeFinalizeFileFailed   = "gen-0004"
+	errCodeStartUpdateFailed    = "gen-0005"
+	errCodeWriteErrorJSONFailed = "gen-0006"
 )
 
 type API struct {
 	cpuManager *cpumanager.CPUManager
 	logger     *loglite.Logger
+}
+
+type errorPayload struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 func Start(address string, cpuManager *cpumanager.CPUManager, logLevel loglite.Level) {
@@ -70,12 +82,12 @@ func (a *API) routes() http.Handler {
 func (a *API) handleLoadApplication(w http.ResponseWriter, r *http.Request) {
 	appName := r.PathValue("applicationname")
 	if appName == "" {
-		http.Error(w, "application name is required", http.StatusBadRequest)
+		a.writeJSONError(w, http.StatusBadRequest, errCodeBadRequest, "application name is required")
 		return
 	}
 	tmp, err := os.CreateTemp(getUpdateFilePath(), "app-*")
 	if err != nil {
-		http.Error(w, "failed to create temporary file: "+err.Error(), http.StatusInternalServerError)
+		a.writeJSONError(w, http.StatusInternalServerError, errCodeCreateTempFailed, "failed to create temporary file")
 		return
 	}
 	a.logger.Infof("received request to update application %s. Download to %s", appName, tmp.Name())
@@ -91,12 +103,12 @@ func (a *API) handleLoadApplication(w http.ResponseWriter, r *http.Request) {
 
 	_, err = io.Copy(tmp, r.Body)
 	if err != nil {
-		http.Error(w, "failed to read request body: "+err.Error(), http.StatusInternalServerError)
+		a.writeJSONError(w, http.StatusInternalServerError, errCodeReadBodyFailed, "failed to read request body")
 		return
 	}
 
 	if err := tmp.Close(); err != nil {
-		http.Error(w, "failed to finalize update file: "+err.Error(), http.StatusInternalServerError)
+		a.writeJSONError(w, http.StatusInternalServerError, errCodeFinalizeFileFailed, "failed to finalize update file")
 		return
 	}
 
@@ -110,10 +122,39 @@ func (a *API) handleLoadApplication(w http.ResponseWriter, r *http.Request) {
 		reply,
 	)
 	if err != nil {
-		http.Error(w, "failed to start application update: "+err.Error(), http.StatusInternalServerError)
+		if code, message, ok := cpumanager.ExtractCode(err); ok {
+			a.writeJSONError(w, statusFromManagerCode(code), code, message)
+			return
+		}
+		a.writeJSONError(w, http.StatusInternalServerError, errCodeStartUpdateFailed, "failed to start application update")
 		return
 	}
 	a.logger.Infof("started application update for %s", appName)
 	keepFile = true
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func statusFromManagerCode(code string) int {
+	switch code {
+	case cpumanager.ErrCodeInvalidCoreOSEntityName:
+		return http.StatusBadRequest
+	case cpumanager.ErrCodeEntityUpdateInProgress, cpumanager.ErrCodeMenderBusy:
+		return http.StatusConflict
+	case cpumanager.ErrCodeStartUpdateFailed:
+		return http.StatusInternalServerError
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+func (a *API) writeJSONError(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	payload := errorPayload{
+		Code:    code,
+		Message: message,
+	}
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		a.logger.Errorf("%s: failed to encode error payload: %v", errCodeWriteErrorJSONFailed, err)
+	}
 }
