@@ -1,6 +1,7 @@
 CPUManager
 [x] detect reboot
-[ ] handle crash/restart of api-server
+[x] handle crash/restart of api-server
+[ ] mender app recovery
 [x] endpoint PUT software/core-os
 [x] endpoint GET software/core-os
 [x] endpoint GET software/application

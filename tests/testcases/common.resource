@@ -2,6 +2,7 @@
 *** Settings ***
 Library   OperatingSystem
 Library      RequestsLibrary
+Library  Process
 
 *** Variables ***
 ${API_URL}        http://localhost:8090/api/v1
@@ -10,6 +11,9 @@ ${STATE_DIR}      ${EXECDIR}/../mock-mender-state
 ${SUT_LOGFILE}    ${EXECDIR}/results/sut.log
 
 *** Keywords ***
+
+Start SUT
+    Start Process  ./run_sim_endless.sh  shell=True  stdout=${SUT_LOGFILE}  stderr=${SUT_LOGFILE}
 
 Load Artifact
     [Arguments]    ${URL}   ${artifact_path}

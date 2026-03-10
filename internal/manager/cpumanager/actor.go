@@ -51,46 +51,19 @@ func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 		m.logger.Infof("Loaded persistent state: %+v", m.state)
 		if m.hasRebooted() {
 			hasRebooted = true
+		} else {
+			// If we have loaded a state, but the system has not rebooted since then,
+			// the server has propably crashed or restarted.
+			m.handleRestart()
 		}
 	}
 	m.saveState()
 	m.mender = newMenderManager(m.logger, &m.state.MenderState, m.emitMenderEvent, hasRebooted)
 	go m.loop()
+	m.restartPendingEntityUpdate()
 	return m, nil
 }
 
-func (m *CPUManager) hasRebooted() bool {
-	currentBootID, err := bootid.Get()
-	if err != nil {
-		m.logger.Errorf("Failed to read current boot ID: %v", err)
-		return false
-	}
-	if m.state.BootID != currentBootID {
-		m.logger.Infof("Detected reboot with new boot ID: %s (previous: %s)", currentBootID, m.state.BootID)
-		m.state.BootID = currentBootID
-		return true
-	}
-	return false
-}
-
-func (m *CPUManager) setInitialPersistentState() {
-	m.state = persistenState{
-		Entities: make(map[string]*entity),
-	}
-	m.state.Entities[coreOSEntity] = newEntity(coreOSEntity, entityTypeCoreOs)
-	m.state.MenderState = menderPersistentState{
-		State:           menderStateIdle,
-		CurrentArtifact: "",
-	}
-	m.logger.Infof("Initialized state with %+v", m.state)
-}
-
-func (m *CPUManager) saveState() {
-	err := m.store.Save(context.Background(), m.state)
-	if err != nil {
-		m.logger.Errorf("Failed to save state: %v", err)
-	}
-}
 
 func (m *CPUManager) loop() {
 	for {
@@ -208,6 +181,7 @@ func (m *CPUManager) handleEntityUpdate(
 	if !m.mender.IsIdle() {
 		m.logger.Infof("Received update command for entity %s, but mender is currently busy with another update", entityName)
 		e.DeployStatus.Code = DeployStatusCodeWaiting
+		e.DeployStatus.Message = "Mender is busy with another update"
 		reply <- Result[struct{}]{}
 		return
 	}
@@ -270,3 +244,55 @@ func (m *CPUManager) handleMenderJobFinished(success bool, message string) {
 		m.logger.Infof("No waiting updates, actor is now idle")
 	}
 }
+
+func (m *CPUManager) hasRebooted() bool {
+	currentBootID, err := bootid.Get()
+	if err != nil {
+		m.logger.Errorf("Failed to read current boot ID: %v", err)
+		return false
+	}
+	if m.state.BootID != currentBootID {
+		m.logger.Infof("Detected reboot with new boot ID: %s (previous: %s)", currentBootID, m.state.BootID)
+		m.state.BootID = currentBootID
+		return true
+	}
+	return false
+}
+
+func (m *CPUManager) setInitialPersistentState() {
+	m.state = persistenState{
+		Entities: make(map[string]*entity),
+	}
+	m.state.Entities[coreOSEntity] = newEntity(coreOSEntity, entityTypeCoreOs)
+	m.state.MenderState = menderPersistentState{
+		State:           menderStateIdle,
+		CurrentArtifact: "",
+	}
+	bootid, err := bootid.Get()
+	if err != nil {
+		m.logger.Errorf("Failed to read boot ID during initial state setup: %v", err)
+		m.state.BootID = ""
+	} else {
+		m.state.BootID = bootid
+	}
+	m.logger.Infof("Initialized state with %+v", m.state)
+}
+
+func (m *CPUManager) handleRestart() {
+	m.logger.Warnf("Detected server restart without reboot. This may be caused by a crash or a manual restart of the server. Resetting state to avoid stuck updates.")
+
+	if m.state.MenderState.State != menderStateIdle {
+		m.logger.Warnf("Mender state was %s during restart, resetting to idle", m.state.MenderState.State.String())
+		m.state.MenderState.State = menderStateIdle
+		m.state.MenderState.CurrentArtifact = ""
+	}
+}
+
+func (m *CPUManager) saveState() {
+	err := m.store.Save(context.Background(), m.state)
+	if err != nil {
+		m.logger.Errorf("Failed to save state: %v", err)
+	}
+}
+
+

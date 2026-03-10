@@ -19,7 +19,7 @@ Prepare Environment
     Set Environment Variable    MOCK_MENDER_STATE_DIR     ${STATE_DIR}
     Set Environment Variable    MOCK_MENDER_KILL_PARENT    yes
     Run Process  preparefs
-    Start Process  ./run_sim_endless.sh  shell=True  stdout=${SUT_LOGFILE}  stderr=${SUT_LOGFILE}
+    Start SUT
     Sleep  3s
 
 Clear Environment
