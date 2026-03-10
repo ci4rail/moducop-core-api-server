@@ -73,19 +73,23 @@ var (
 	ErrMenderBusy = errors.New("mender is busy with another update")
 )
 
-func newMenderManager(logger *loglite.Logger, state *menderPersistentState, emitEvent func(menderEvent)) *menderManager {
-	return &menderManager{
+func newMenderManager(logger *loglite.Logger, state *menderPersistentState, emitEvent func(menderEvent), hasRebooted bool) *menderManager {
+	m := &menderManager{
 		logger:    logger,
 		state:     state,
 		emitEvent: emitEvent,
 	}
+	if hasRebooted {
+		m.menderEmitRebootFinished("System reboot detected", nil)
+	}
+	return m
 }
 
 func (m *menderManager) StartUpdateJob(entityType entityType, artifact string, timeout time.Duration) error {
 	if m.state.State != menderStateIdle {
 		return ErrMenderBusy
 	}
-	m.state.State = menderStateInstalling	
+	m.state.State = menderStateInstalling
 	m.state.CurrentArtifact = artifact
 	m.state.CurrentEntityType = entityType
 	m.runMenderInstallInBackGround(artifact, timeout)
@@ -126,16 +130,23 @@ func (m *menderManager) runMenderCommitInBackGround(timeout time.Duration) {
 
 func (m *menderManager) runRebootInBackGround(timeout time.Duration) {
 	go func() {
+		time.Sleep(3 * time.Second) 
 		stdout, stderr, _, err := execcli.RunCommand("reboot", timeout)
-
-		me := menderEvent{
-			Code:    menderEventRebootFinished,
-			Success: err == nil,
-			Message: fmt.Sprintf("stdout: %s, stderr: %s, err: %v", stdout, stderr, err),
+		if err != nil {
+			message := fmt.Sprintf("Reboot command failed: stdout: %s, stderr: %s, err: %v", stdout, stderr, err)
+			m.menderEmitRebootFinished(message, err)
 		}
-		m.logger.Infof("Reboot finished: %v", me)
-		m.emitEvent(me)
 	}()
+}
+
+func (m *menderManager) menderEmitRebootFinished(message string, err error) {
+	me := menderEvent{
+		Code:    menderEventRebootFinished,
+		Success: err == nil,
+		Message: message,
+	}
+	m.logger.Infof("Reboot finished: %v", me)
+	m.emitEvent(me)
 }
 
 func menderUpdateResultIsSuccess(result menderUpdateResult) bool {

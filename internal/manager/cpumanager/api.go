@@ -23,14 +23,14 @@ const (
 )
 
 type DeployStatus struct {
-	Code    DeployStatusCode
-	Message string
+	Code    DeployStatusCode `json:"code"`
+	Message string           `json:"message"`
 }
 
 type EntityStatus struct {
-	DeployStatus   DeployStatus
-	CurrentName    string
-	CurrentVersion string
+	DeployStatus   DeployStatus `json:"deploy_status"`
+	CurrentName    string       `json:"current_name"`
+	CurrentVersion string       `json:"current_version"`
 }
 
 type StartCoreOsUpdate struct {

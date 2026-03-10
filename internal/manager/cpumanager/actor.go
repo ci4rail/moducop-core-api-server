@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/ci4rail/moducop-core-api-server/internal/bootid"
 	"github.com/ci4rail/moducop-core-api-server/internal/loglite"
 	"github.com/ci4rail/moducop-core-api-server/pkg/diskstate"
 )
@@ -20,6 +21,7 @@ const (
 type persistenState struct {
 	MenderState menderPersistentState
 	Entities    map[string]*entity // key: entity name, value: entity
+	BootID      string
 }
 
 type CPUManager struct {
@@ -38,27 +40,49 @@ func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 		quit:   make(chan struct{}),
 		store:  diskstate.New[persistenState](persistentPath),
 	}
-
+	hasRebooted := false
 	if err := m.store.Load(context.Background(), &m.state); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("failed to load persistent state: %w", err)
 		}
+		m.setInitialPersistentState()
 		m.logger.Infof("Persistent state file does not exist, initializing new state")
-		m.state = persistenState{
-			Entities: make(map[string]*entity),
+	} else {
+		m.logger.Infof("Loaded persistent state: %+v", m.state)
+		if m.hasRebooted() {
+			hasRebooted = true
 		}
-		m.state.Entities[coreOSEntity] = newEntity(coreOSEntity, entityTypeCoreOs)
-		m.state.MenderState = menderPersistentState{
-			State:           menderStateIdle,
-			CurrentArtifact: "",
-		}
-		m.logger.Infof("Initialized state with %+v", m.state)
-		m.saveState()
 	}
-
-	m.mender = newMenderManager(m.logger, &m.state.MenderState, m.emitMenderEvent)
+	m.saveState()
+	m.mender = newMenderManager(m.logger, &m.state.MenderState, m.emitMenderEvent, hasRebooted)
 	go m.loop()
 	return m, nil
+}
+
+func (m *CPUManager) hasRebooted() bool {
+	currentBootID, err := bootid.Get()
+	if err != nil {
+		m.logger.Errorf("Failed to read current boot ID: %v", err)
+		return false
+	}
+	if m.state.BootID != currentBootID {
+		m.logger.Infof("Detected reboot with new boot ID: %s (previous: %s)", currentBootID, m.state.BootID)
+		m.state.BootID = currentBootID
+		return true
+	}
+	return false
+}
+
+func (m *CPUManager) setInitialPersistentState() {
+	m.state = persistenState{
+		Entities: make(map[string]*entity),
+	}
+	m.state.Entities[coreOSEntity] = newEntity(coreOSEntity, entityTypeCoreOs)
+	m.state.MenderState = menderPersistentState{
+		State:           menderStateIdle,
+		CurrentArtifact: "",
+	}
+	m.logger.Infof("Initialized state with %+v", m.state)
 }
 
 func (m *CPUManager) saveState() {
