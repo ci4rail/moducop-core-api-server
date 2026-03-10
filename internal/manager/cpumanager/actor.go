@@ -24,7 +24,7 @@ type persistenState struct {
 
 type CPUManager struct {
 	logger *loglite.Logger
-	inbox  chan command
+	inbox  chan Command
 	quit   chan struct{}
 	store  *diskstate.Store[persistenState]
 	state  persistenState
@@ -34,7 +34,7 @@ type CPUManager struct {
 func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 	m := &CPUManager{
 		logger: loglite.New("cpumanager", os.Stdout, logLevel),
-		inbox:  make(chan command, inboxSize),
+		inbox:  make(chan Command, inboxSize),
 		quit:   make(chan struct{}),
 		store:  diskstate.New[persistenState](persistentPath),
 	}
@@ -61,7 +61,7 @@ func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 	return m, nil
 }
 
-func (m *CPUManager) saveState()  {
+func (m *CPUManager) saveState() {
 	err := m.store.Save(context.Background(), m.state)
 	if err != nil {
 		m.logger.Errorf("Failed to save state: %v", err)
@@ -72,25 +72,25 @@ func (m *CPUManager) loop() {
 	for {
 		select {
 		case <-m.quit:
-			m.saveState(); 
+			m.saveState()
 			return
 		case cmd := <-m.inbox:
 			m.handleCommand(cmd)
 		}
-		m.saveState(); 
+		m.saveState()
 	}
 }
 
-func (m *CPUManager) handleCommand(cmd command) {
+func (m *CPUManager) handleCommand(cmd Command) {
 	switch c := cmd.(type) {
 	case StartCoreOsUpdate:
 		m.handleEntityUpdate(coreOSEntity, entityTypeCoreOs, c.PathToMenderFile, c.Reply)
 	case GetCoreOsState:
-		m.logger.Debugf("GetCoreOsState not implemented yet: %+v", c)
+		m.handleGetEntityState(coreOSEntity, c.Reply)
 	case StartApplicationUpdate:
 		m.handleEntityUpdate(c.AppName, entityTypeApplication, c.PathToMenderFile, c.Reply)
 	case GetApplicationState:
-		m.logger.Debugf("GetApplicationState not implemented yet: %+v", c)
+		m.handleGetEntityState(c.AppName, c.Reply)
 	case Reboot:
 		m.logger.Debugf("Reboot not implemented yet: %+v", c)
 	case MenderEvent:
@@ -100,7 +100,7 @@ func (m *CPUManager) handleCommand(cmd command) {
 	}
 }
 
-// handleMenderEvent handles events emitted by the mender manager. 
+// handleMenderEvent handles events emitted by the mender manager.
 func (m *CPUManager) handleMenderEvent(cmd MenderEvent) {
 	m.logger.Infof("Handling mender event: %d", cmd.event.Code)
 
@@ -118,7 +118,7 @@ func (m *CPUManager) handleMenderEvent(cmd MenderEvent) {
 	}
 }
 
-// emitMenderEvent sends a mender event to the manager's inbox. 
+// emitMenderEvent sends a mender event to the manager's inbox.
 // This is used by the mender manager to notify about events.
 func (m *CPUManager) emitMenderEvent(event menderEvent) {
 	m.inbox <- MenderEvent{event: event}
@@ -195,6 +195,28 @@ func (m *CPUManager) handleEntityUpdate(
 	}
 
 	reply <- Result[struct{}]{}
+}
+
+func (m *CPUManager) handleGetEntityState(entityName string, reply chan Result[EntityStatus]) {
+	e, ok := m.state.Entities[entityName]
+	if !ok {
+		reply <- Result[EntityStatus]{Err: NewCodedError(
+			ErrCodeInvalidCoreOSEntityName,
+			fmt.Sprintf("invalid entity name for CoreOS: %s", entityName),
+		)}
+		return
+	}
+	nv, err := e.getDeployedVersion()
+	if err != nil {
+		m.logger.Errorf("Failed to get deployed version for entity %s: %v", entityName, err)
+		reply <- Result[EntityStatus]{Err: fmt.Errorf("failed to get deployed version for entity %s: %w", entityName, err)}
+		return
+	}
+	reply <- Result[EntityStatus]{Value: EntityStatus{
+		DeployStatus:   e.DeployStatus,
+		CurrentName:    nv.Name,
+		CurrentVersion: nv.Version,
+	}}
 }
 
 func (m *CPUManager) handleMenderJobFinished(success bool, message string) {

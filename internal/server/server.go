@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -20,12 +21,12 @@ const (
 	readTO                      = 30 * time.Second
 	writeTO                     = 30 * time.Second
 	idleTO                      = 60 * time.Second
-	errCodeBadRequest           = "gen-0001"
-	errCodeCreateTempFailed     = "gen-0002"
-	errCodeReadBodyFailed       = "gen-0003"
-	errCodeFinalizeFileFailed   = "gen-0004"
-	errCodeStartUpdateFailed    = "gen-0005"
-	errCodeWriteErrorJSONFailed = "gen-0006"
+	errUnknown                  = "api-0000"
+	errCodeBadRequest           = "api-0001"
+	errCodeCreateTempFailed     = "api-0002"
+	errCodeReadBodyFailed       = "api-0003"
+	errCodeFinalizeFileFailed   = "api-0004"
+	errCodeWriteErrorJSONFailed = "api-0005"
 )
 
 type API struct {
@@ -75,76 +76,38 @@ func getUpdateFilePath() string {
 
 func (a *API) routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("PUT "+apiPrefix+"/software/core-os", a.handleLoadCoreOS)
+	mux.HandleFunc("GET "+apiPrefix+"/software/core-os", a.handleGetCoreOS)
 	mux.HandleFunc("PUT "+apiPrefix+"/software/application/{applicationname}", a.handleLoadApplication)
+	mux.HandleFunc("GET "+apiPrefix+"/software/application/{applicationname}", a.handleGetApplication)
 	return mux
 }
 
-func (a *API) handleLoadApplication(w http.ResponseWriter, r *http.Request) {
-	appName := r.PathValue("applicationname")
-	if appName == "" {
-		a.writeJSONError(w, http.StatusBadRequest, errCodeBadRequest, "application name is required")
-		return
-	}
-	tmp, err := os.CreateTemp(getUpdateFilePath(), "app-*")
+// Save body to a temporary file and return the path to the file.
+// The caller is responsible for deleting the file when it is no longer needed.
+// Return path, errCode, error
+func (a *API) saveBodyToFile(body io.Reader, tempPattern string) (string, string, error) {
+	tmp, err := os.CreateTemp(getUpdateFilePath(), tempPattern)
 	if err != nil {
-		a.writeJSONError(w, http.StatusInternalServerError, errCodeCreateTempFailed, "failed to create temporary file")
-		return
+		return "", errCodeCreateTempFailed, fmt.Errorf("failed to create temporary file: %w", err)
 	}
-	a.logger.Infof("received request to update application %s. Download to %s", appName, tmp.Name())
+	a.logger.Debugf("Download to %s", tmp.Name())
 
 	tmpPath := tmp.Name()
-	keepFile := false
 	defer func() {
 		_ = tmp.Close()
-		if !keepFile {
-			_ = os.Remove(tmpPath)
-		}
 	}()
 
-	_, err = io.Copy(tmp, r.Body)
+	_, err = io.Copy(tmp, body)
 	if err != nil {
-		a.writeJSONError(w, http.StatusInternalServerError, errCodeReadBodyFailed, "failed to read request body")
-		return
+		return "", errCodeReadBodyFailed, fmt.Errorf("failed to read request body: %w", err)
 	}
 
 	if err := tmp.Close(); err != nil {
-		a.writeJSONError(w, http.StatusInternalServerError, errCodeFinalizeFileFailed, "failed to finalize update file")
-		return
+		return "", errCodeFinalizeFileFailed, fmt.Errorf("failed to finalize update file: %w", err)
 	}
 
-	reply := make(chan cpumanager.Result[struct{}], 1)
-	_, err = cpumanager.Ask(r.Context(), a.cpuManager,
-		cpumanager.StartApplicationUpdate{
-			AppName:          appName,
-			PathToMenderFile: tmpPath,
-			Reply:            reply,
-		},
-		reply,
-	)
-	if err != nil {
-		if code, message, ok := cpumanager.ExtractCode(err); ok {
-			a.writeJSONError(w, statusFromManagerCode(code), code, message)
-			return
-		}
-		a.writeJSONError(w, http.StatusInternalServerError, errCodeStartUpdateFailed, "failed to start application update")
-		return
-	}
-	a.logger.Infof("started application update for %s", appName)
-	keepFile = true
-	w.WriteHeader(http.StatusAccepted)
-}
-
-func statusFromManagerCode(code string) int {
-	switch code {
-	case cpumanager.ErrCodeInvalidCoreOSEntityName:
-		return http.StatusBadRequest
-	case cpumanager.ErrCodeEntityUpdateInProgress, cpumanager.ErrCodeMenderBusy:
-		return http.StatusConflict
-	case cpumanager.ErrCodeStartUpdateFailed:
-		return http.StatusInternalServerError
-	default:
-		return http.StatusInternalServerError
-	}
+	return tmpPath, "", nil
 }
 
 func (a *API) writeJSONError(w http.ResponseWriter, status int, code, message string) {
@@ -156,5 +119,13 @@ func (a *API) writeJSONError(w http.ResponseWriter, status int, code, message st
 	}
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		a.logger.Errorf("%s: failed to encode error payload: %v", errCodeWriteErrorJSONFailed, err)
+	}
+}
+
+func (a *API) writeJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		a.logger.Errorf("%s: failed to encode response payload: %v", errCodeWriteErrorJSONFailed, err)
 	}
 }

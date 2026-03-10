@@ -2,6 +2,7 @@ CPUManager
 [ ] detect reboot
 [ ] handle crash/restart of api-server
 [ ] endpoint GET software/core-os
+[ ] endpoint GET software/core-os
 [ ] endpoint GET software/application
 [ ] endpoint GET software/firmware
 [ ] endpoint GET hardware
