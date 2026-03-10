@@ -43,7 +43,7 @@ func TestPersistentStateMarshalsEnumsAsStrings(t *testing.T) {
 	if !strings.Contains(s, `"EntityType":"coreos"`) {
 		t.Fatalf("expected entity type as string, got: %s", s)
 	}
-	if !strings.Contains(s, `"Code":"in_progress"`) {
+	if !strings.Contains(s, `"code":"in_progress"`) {
 		t.Fatalf("expected deploy status code as string, got: %s", s)
 	}
 }

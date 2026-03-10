@@ -232,14 +232,21 @@ func (m *CPUManager) handleGetEntityState(entityName string, reply chan Result[E
 	}
 	nv, err := e.getDeployedVersion()
 	if err != nil {
-		m.logger.Errorf("Failed to get deployed version for entity %s: %v", entityName, err)
-		reply <- Result[EntityStatus]{Err: fmt.Errorf("failed to get deployed version for entity %s: %w", entityName, err)}
-		return
+		m.logger.Errorf("Failed to get deployed version for entity %s: %v. Assume not deployed", entityName, err)
+		nv = NameVersion{}
 	}
+	// if err != nil && e.DeployStatus.Code == DeployStatusCodeSuccess {
+	// 	m.logger.Errorf("Failed to get deployed version for entity %s: %v. Assume ", entityName, err)
+	// 	reply <- Result[EntityStatus]{Err: NewCodedError(ErrCodeGetVersionFailed, fmt.Sprintf("failed to get deployed version for entity %s: %v", entityName, err))
+	// 		fmt.Errorf("failed to get deployed version for entity %s: %w", entityName, err)}
+	// 	return
+	// }
 	reply <- Result[EntityStatus]{Value: EntityStatus{
 		DeployStatus:   e.DeployStatus,
-		CurrentName:    nv.Name,
-		CurrentVersion: nv.Version,
+		Current: NameVersion {
+			nv.Name,
+			nv.Version,
+		},   
 	}}
 }
 

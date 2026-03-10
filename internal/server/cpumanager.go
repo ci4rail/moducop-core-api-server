@@ -56,7 +56,6 @@ func (a *API) handleGetCoreOS(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, http.StatusOK, res)
 }
 
-
 func (a *API) handleLoadApplication(w http.ResponseWriter, r *http.Request) {
 	appName := r.PathValue("applicationname")
 	if appName == "" {
@@ -116,9 +115,7 @@ func (a *API) handleGetApplication(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, http.StatusOK, res)
 }
 
-
 func execCPUManagerCommand[T any, C cpumanager.Command](ctx context.Context, m *cpumanager.CPUManager, cmd C, reply chan cpumanager.Result[T]) (T, string, string, error) {
-
 	res, err := cpumanager.Ask(ctx, m, cmd, reply)
 	if err != nil {
 		if code, message, ok := cpumanager.ExtractCode(err); ok {
@@ -131,6 +128,8 @@ func execCPUManagerCommand[T any, C cpumanager.Command](ctx context.Context, m *
 
 func statusFromCPUManagerCode(code string) int {
 	switch code {
+	case cpumanager.ErrCodeAlreadyDeployed:
+		return http.StatusOK
 	case cpumanager.ErrCodeInvalidCoreOSEntityName:
 		return http.StatusBadRequest
 	case cpumanager.ErrCodeEntityUpdateInProgress, cpumanager.ErrCodeMenderBusy:

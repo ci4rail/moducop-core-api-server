@@ -12,6 +12,7 @@ const (
 	ErrCodeStartUpdateFailed       = "cpm-0004"
 	ErrCodeAlreadyDeployed         = "cpm-0005"
 	ErrCodeArtifactInvalid         = "cpm-0006"
+	ErrCodeGetVersionFailed        = "cpm-0007"
 )
 
 type CodedError interface {

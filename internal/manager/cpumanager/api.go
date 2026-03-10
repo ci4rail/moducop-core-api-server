@@ -27,10 +27,14 @@ type DeployStatus struct {
 	Message string           `json:"message"`
 }
 
+type NameVersion struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
 type EntityStatus struct {
-	DeployStatus   DeployStatus `json:"deploy_status"`
-	CurrentName    string       `json:"current_name"`
-	CurrentVersion string       `json:"current_version"`
+	DeployStatus DeployStatus `json:"deploy_status"`
+	Current      NameVersion  `json:"current"`
 }
 
 type StartCoreOsUpdate struct {

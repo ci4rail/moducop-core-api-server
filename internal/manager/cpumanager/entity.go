@@ -19,13 +19,10 @@ type entity struct {
 	EntityType     entityType
 	DeployStatus   DeployStatus
 	MenderArtifact string      // "" if no update is in progress
-	DeployingNV    nameVersion // the version that is being deployed, empty if no deployment in progress
+	DeployingNV    NameVersion // the version that is being deployed, empty if no deployment in progress
 }
 
-type nameVersion struct {
-	Name    string
-	Version string
-}
+
 
 func newEntity(name string, entityType entityType) *entity {
 	e := &entity{
@@ -110,55 +107,55 @@ func (m *CPUManager) finishEntityUpdate(e *entity, success bool, message string)
 		e.DeployStatus.Message = message
 	}
 	e.MenderArtifact = ""
-	e.DeployingNV = nameVersion{}
+	e.DeployingNV = NameVersion{}
 }
 
 // getDeployedVersion returns the currently deployed version for the given entity.
 // Returns nameVersion, error. "nameVersion.name" for applications is the same as the entity name
-func (e *entity) getDeployedVersion() (nameVersion, error) {
+func (e *entity) getDeployedVersion() (NameVersion, error) {
 
 	switch e.EntityType {
 	case entityTypeCoreOs:
 		name, version, err := coreOSVersionFromTargetFS()
 		if err != nil {
-			return nameVersion{}, fmt.Errorf("get version for CoreOS: %w", err)
+			return NameVersion{}, fmt.Errorf("get version for CoreOS: %w", err)
 		}
-		return nameVersion{Name: name, Version: version}, nil
+		return NameVersion{Name: name, Version: version}, nil
 	case entityTypeApplication:
 		version, err := appVersionFromTargetFS(e.Name)
 		if err != nil {
-			return nameVersion{}, fmt.Errorf("get version for application %s: %w", e.Name, err)
+			return NameVersion{}, fmt.Errorf("get version for application %s: %w", e.Name, err)
 		}
-		return nameVersion{Name: e.Name, Version: version}, nil
+		return NameVersion{Name: e.Name, Version: version}, nil
 	default:
-		return nameVersion{}, fmt.Errorf("unknown entity type: %v", e.EntityType)
+		return NameVersion{}, fmt.Errorf("unknown entity type: %v", e.EntityType)
 	}
 }
 
 // getVersionFromArtifact extracts the version information from the given artifact for the given entity.
 // Returns nameVersion, error. "nameVersion.name" for applications is the same as the entity name
-func (e *entity) getVersionFromArtifact(artifact string) (nameVersion, error) {
+func (e *entity) getVersionFromArtifact(artifact string) (NameVersion, error) {
 	switch e.EntityType {
 	case entityTypeCoreOs:
 		name, version, err := menderartifact.CoreOSVersionFromArtifact(artifact)
 		if err != nil {
-			return nameVersion{}, fmt.Errorf("get version from artifact for CoreOS: %w", err)
+			return NameVersion{}, fmt.Errorf("get version from artifact for CoreOS: %w", err)
 		}
-		return nameVersion{Name: name, Version: version}, nil
+		return NameVersion{Name: name, Version: version}, nil
 	case entityTypeApplication:
 		version, err := menderartifact.AppVersionFromArtifact(artifact, e.Name)
 		if err != nil {
-			return nameVersion{}, fmt.Errorf("get version from artifact for application %s: %w", e.Name, err)
+			return NameVersion{}, fmt.Errorf("get version from artifact for application %s: %w", e.Name, err)
 		}
-		return nameVersion{Name: e.Name, Version: version}, nil
+		return NameVersion{Name: e.Name, Version: version}, nil
 	default:
-		return nameVersion{}, fmt.Errorf("unknown entity type: %v", e.EntityType)
+		return NameVersion{}, fmt.Errorf("unknown entity type: %v", e.EntityType)
 	}
 }
 
 // isDeployed checks if the given artifact is deployed for this entity
 // by comparing the version from the artifact with the currently deployed version.
-func (e *entity) isDeployed(expected nameVersion) (bool, error) {
+func (e *entity) isDeployed(expected NameVersion) (bool, error) {
 	deployedNV, err := e.getDeployedVersion()
 	if err != nil {
 		return false, fmt.Errorf("get deployed version: %w", err)

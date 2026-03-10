@@ -1,9 +1,9 @@
 CPUManager
-[ ] detect reboot
+[x] detect reboot
 [ ] handle crash/restart of api-server
-[ ] endpoint GET software/core-os
-[ ] endpoint GET software/core-os
-[ ] endpoint GET software/application
+[x] endpoint PUT software/core-os
+[x] endpoint GET software/core-os
+[x] endpoint GET software/application
 [ ] endpoint GET software/firmware
 [ ] endpoint GET hardware
 
@@ -31,3 +31,6 @@ Outside this repo
 
 [ ] OpenAPI spec update
 
+[ ] user-docs
+
+[ ] systemd deployment
