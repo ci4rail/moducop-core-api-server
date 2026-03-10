@@ -391,6 +391,11 @@ func maybeInjectedFailure(st *mockmender.State, point string) error {
 	if st.ErrorInjectPoint != point {
 		return nil
 	}
+	if point == mockmender.ErrInjectAfterExtractBeforeStart {
+		if err := mockmender.RotateBootID(); err != nil {
+			return err
+		}
+	}
 	if err := mockmender.SaveState(*st); err != nil {
 		return err
 	}

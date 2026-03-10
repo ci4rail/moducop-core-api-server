@@ -1,0 +1,32 @@
+CPUManager
+[ ] detect reboot
+[ ] handle crash/restart of api-server
+[ ] endpoint GET software/core-os
+[ ] endpoint GET software/application
+[ ] endpoint GET software/firmware
+[ ] endpoint GET hardware
+
+[ ] io4edge Manager
+
+Mocks
+[x] preparefs
+[x] simulate /proc/sys/kernel/random/boot_id
+[ ] ee-inv
+[ ] io4edge-cli
+
+
+Testing
+
+Mock tests
+[ ]
+
+
+Real Target 
+
+---
+Outside this repo
+
+[ ] Repo application generation
+
+[ ] OpenAPI spec update
+

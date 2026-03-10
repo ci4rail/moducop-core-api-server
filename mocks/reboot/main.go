@@ -36,6 +36,11 @@ func main() {
 	default:
 	}
 
+	if err := mockmender.RotateBootID(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
 	if err := mockmender.SaveState(st); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

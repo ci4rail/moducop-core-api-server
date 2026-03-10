@@ -208,3 +208,19 @@ The mocked docker command should support:
 
 - docker ps --format '{{.Names}}\t{{.Labels}}'
 - docker compose -p {project] down
+
+### preparefs command
+
+The preparefs command should prepare the filesystem for the mock. It should create the necessary directories and files, and set up the initial state of the system. It should be idempotent, so it can be run multiple times without causing issues. It should:
+
+- Create /etc/issue with the following content:
+```
+TDX Wayland with XWayland 7.1.0-devel-20260210154127+build.0 (scarthgap) \n \l
+Moducop-CPU01_Standard-Image_v2.6.0.f457f6d.20260210.1540
+```
+
+- Create /proc/sys/kernel/random/boot_id with a random UUID. 
+
+### boot_id simulation
+
+All commands that simulate a reboot should update the /proc/sys/kernel/random/boot_id file with a new random UUID to simulate a new boot. (reboot and mender-update after hitting the error injection point that simulates a reboot)

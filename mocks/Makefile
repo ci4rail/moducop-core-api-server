@@ -1,4 +1,4 @@
-mocks: mender-update docker reboot
+mocks: mender-update docker reboot preparefs
 
 mender-update: ## Simulates mender-update for rootfs and application updates
 	@go build -o bin/mender-update ./mender-update/main.go
@@ -9,7 +9,10 @@ docker:
 reboot: ## Simulates a system reboot
 	@go build -o bin/reboot ./reboot/main.go
 
+preparefs: ## Prepares mock filesystem state
+	@go build -o bin/preparefs ./preparefs/main.go
+
 test-mocks:
 	robot -d tests/results tests/
 
-.PHONY: mocks mender-update docker reboot test-mocks
+.PHONY: mocks mender-update docker reboot preparefs test-mocks

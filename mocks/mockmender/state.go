@@ -1,6 +1,7 @@
 package mockmender
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,8 @@ const (
 	stageInstalled   = "installed"
 	stageBootedTrial = "booted-trial"
 )
+
+const defaultIssueContent = "TDX Wayland with XWayland 7.1.0-devel-20260210154127+build.0 (scarthgap) \\n \\l\nModucop-CPU01_Standard-Image_v2.6.0.f457f6d.20260210.1540\n"
 
 type State struct {
 	ActiveRootfs       string           `json:"active_rootfs"`
@@ -235,6 +238,10 @@ func IssueMirrorPath() string {
 	return MirrorPathFromAbsolute("/etc/issue")
 }
 
+func BootIDPath() string {
+	return MirrorPathFromAbsolute("/proc/sys/kernel/random/boot_id")
+}
+
 func MenderAppBasePath() string {
 	return MirrorPathFromAbsolute("/data/mender-app")
 }
@@ -253,17 +260,36 @@ func EnsureMockFilesystem() error {
 		return err
 	}
 	if _, err := os.Stat(issuePath); errors.Is(err, os.ErrNotExist) {
-		hostIssue, readErr := os.ReadFile("/etc/issue")
-		if readErr != nil {
-			hostIssue = []byte("mock rootfs\n")
-		}
-		if writeErr := os.WriteFile(issuePath, hostIssue, 0o644); writeErr != nil {
+		if writeErr := os.WriteFile(issuePath, []byte(defaultIssueContent), 0o644); writeErr != nil {
 			return writeErr
 		}
 	} else if err != nil {
 		return err
 	}
+
+	bootIDPath := BootIDPath()
+	if err := os.MkdirAll(filepath.Dir(bootIDPath), 0o755); err != nil {
+		return err
+	}
+	if _, err := os.Stat(bootIDPath); errors.Is(err, os.ErrNotExist) {
+		if err := RotateBootID(); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+
 	return os.MkdirAll(MenderAppBasePath(), 0o755)
+}
+
+func PrepareFilesystem() error {
+	if err := EnsureMockFilesystem(); err != nil {
+		return err
+	}
+	if err := os.WriteFile(IssueMirrorPath(), []byte(defaultIssueContent), 0o644); err != nil {
+		return err
+	}
+	return RotateBootID()
 }
 
 func UpdateIssueMirror(fromPath string) error {
@@ -275,6 +301,29 @@ func UpdateIssueMirror(fromPath string) error {
 		return err
 	}
 	return os.WriteFile(IssueMirrorPath(), b, 0o644)
+}
+
+func RotateBootID() error {
+	id, err := randomUUID()
+	if err != nil {
+		return err
+	}
+	bootIDPath := BootIDPath()
+	if err := os.MkdirAll(filepath.Dir(bootIDPath), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(bootIDPath, []byte(id+"\n"), 0o644)
+}
+
+func randomUUID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
 }
 
 func RestorePreviousApp(s *State) {
