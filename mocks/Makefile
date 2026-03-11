@@ -1,4 +1,4 @@
-mocks: mender-update docker reboot preparefs io4edge-cli
+mocks: mender-update docker reboot preparefs io4edge-cli ee-inv
 
 mender-update: ## Simulates mender-update for rootfs and application updates
 	@go build -o bin/mender-update ./mender-update/main.go
@@ -15,7 +15,10 @@ preparefs: ## Prepares mock filesystem state
 io4edge-cli: ## Simulates io4edge-cli firmware and hardware commands
 	@go build -o bin/io4edge-cli ./io4edge-cli/main.go
 
+ee-inv: ## Simulates ee-inv hardware inventory lookup
+	@go build -o bin/ee-inv ./ee-inv/main.go
+
 test-mocks:
 	robot -d tests/results tests/
 
-.PHONY: mocks mender-update docker reboot preparefs io4edge-cli test-mocks
+.PHONY: mocks mender-update docker reboot preparefs io4edge-cli ee-inv test-mocks

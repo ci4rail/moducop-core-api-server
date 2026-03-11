@@ -284,3 +284,16 @@ S100-IUO16-USB-EXT1-UC2 192.168.201.1   s100-iou16      <serial>
 ...
 
 ### ee-inv
+
+ee-inv returns the hardware information of moducop.
+
+For the mock, just return the following fixed output
+
+$ ee-inv /sys/bus/i2c/devices/3-0050/eeprom@256:256
+{
+  "vendor": "Ci4Rail",
+  "model": "S100-MLC01",
+  "variant": 0,
+  "majorVersion": 1,
+  "serial": "12345"
+}

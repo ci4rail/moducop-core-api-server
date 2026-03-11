@@ -13,14 +13,14 @@ CPUManager
 Mocks
 [x] preparefs
 [x] simulate /proc/sys/kernel/random/boot_id
-[ ] ee-inv
-[ ] io4edge-cli
+[x] ee-inv
+[x] io4edge-cli
 
 
 Testing
 
-Mock tests
-[ ]
+[x] Mock tests
+
 
 
 Real Target 
