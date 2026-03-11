@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	defaultServerAddress = ":8090"
-	cpuManagerPersistentStatePath  = "/data/core-api-server/cpumanager-state.json"
+	defaultServerAddress              = ":8090"
+	cpuManagerPersistentStatePath     = "/data/core-api-server/cpumanager-state.json"
 	io4edgeManagerPersistentStatePath = "/data/core-api-server/io4edgemanager-state.json"
-	exitCodeUsageError   = 2
-	dirModeDefault       = 0o755
+	exitCodeUsageError                = 2
+	dirModeDefault                    = 0o755
 )
 
 type staticError string
@@ -58,7 +58,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to initialize io4edge manager: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	server.Start(*serverAddress, cpuManager, io4edgeManager, logLevel)
 
 	sigCh := make(chan os.Signal, 1)

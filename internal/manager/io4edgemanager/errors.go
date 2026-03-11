@@ -6,10 +6,10 @@ import (
 )
 
 const (
-	ErrCodeDeviceUpdateInProgress  = "io4e-0001"
-	ErrCodeAlreadyDeployed         = "io4e-0002"
-	ErrCodeArtifactInvalid         = "io4e-0003"
-	ErrCodeDeviceNotFound          = "io4e-0004"
+	ErrCodeDeviceUpdateInProgress = "io4e-0001"
+	ErrCodeAlreadyDeployed        = "io4e-0002"
+	ErrCodeArtifactInvalid        = "io4e-0003"
+	ErrCodeDeviceNotFound         = "io4e-0004"
 )
 
 type CodedError interface {

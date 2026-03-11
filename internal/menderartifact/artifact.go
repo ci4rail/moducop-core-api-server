@@ -1,4 +1,4 @@
-// package menderartifact provides functions to read and parse Mender artifact files, 
+// package menderartifact provides functions to read and parse Mender artifact files,
 // specifically to extract version information from the artifact headers.
 package menderartifact
 
@@ -17,7 +17,7 @@ type HeadersTypeInfo struct {
 	ArtifactProvides map[string]any `json:"artifact_provides"`
 }
 
-// CoreOSVersionFromArtifact reads the artifact file at the given path and extracts the CoreOS version 
+// CoreOSVersionFromArtifact reads the artifact file at the given path and extracts the CoreOS version
 // from the artifact_provides field in the embedded header.tar(.gz) headers/0000/type-info file.
 // It looks for a "provides" info for "rootfs-image.version", it then extracts the name and version
 // from the value.
@@ -51,7 +51,7 @@ func coreOsVersionFromRootfsImageVersion(providesStr string) (string, string, er
 	name := matches[1]
 	version := matches[2]
 	return name, version, nil
-}	
+}
 
 // AppVersionFromArtifact reads the artifact file at the given path and extracts the application version
 // for the given appName from the artifact_provides field in the embedded header.tar(.gz) headers/0000/type-info file.
@@ -72,8 +72,8 @@ func AppVersionFromArtifact(path string, appName string) (string, error) {
 	return providesStr, nil
 }
 
-// ParseArtifactHeadersTypeInfo reads the artifact file at the given 
-// path and extracts the artifact_provides information from the 
+// ParseArtifactHeadersTypeInfo reads the artifact file at the given
+// path and extracts the artifact_provides information from the
 // embedded header.tar(.gz) headers/0000/type-info file.
 // Within the type-info file, it looks for the artifact_provides field and returns it as a map.
 func ParseArtifactHeadersTypeInfo(path string) (HeadersTypeInfo, error) {

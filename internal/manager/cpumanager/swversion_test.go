@@ -58,7 +58,6 @@ func TestCoreOsVersionFromIssueLine(t *testing.T) {
 	}
 }
 
-
 func TestAppVersionFromData(t *testing.T) {
 	tests := []struct {
 		name        string

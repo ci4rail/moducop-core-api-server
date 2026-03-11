@@ -57,25 +57,25 @@ func TestCoreOsVersionFromRootfsImageVersion(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name           string
-		providesStr    string
-		expectedName   string
+		name            string
+		providesStr     string
+		expectedName    string
 		expectedVersion string
-		expectError    bool
+		expectError     bool
 	}{
 		{
-			name:           "valid format",
-			providesStr:    "cpu01-standard-v2.6.0.f457f6d.20260210.1540",
-			expectedName:   "cpu01-standard",
+			name:            "valid format",
+			providesStr:     "cpu01-standard-v2.6.0.f457f6d.20260210.1540",
+			expectedName:    "cpu01-standard",
 			expectedVersion: "v2.6.0.f457f6d.20260210.1540",
-			expectError:    false,
+			expectError:     false,
 		},
 		{
-			name:           "valid format2",
-			providesStr:    "cpu01-standard-mod-v2.6.0",
-			expectedName:   "cpu01-standard-mod",
+			name:            "valid format2",
+			providesStr:     "cpu01-standard-mod-v2.6.0",
+			expectedName:    "cpu01-standard-mod",
 			expectedVersion: "v2.6.0",
-			expectError:    false,
+			expectError:     false,
 		},
 		{
 			name:        "invalid format - missing version",
@@ -115,7 +115,7 @@ func TestCoreOsVersionFromRootfsImageVersion(t *testing.T) {
 				t.Errorf("unexpected version: got %s, want %s", version, tc.expectedVersion)
 			}
 		})
-	}	
+	}
 }
 
 func TestCoreOSVersionFromArtifact(t *testing.T) {

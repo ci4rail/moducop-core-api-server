@@ -145,7 +145,6 @@ func (a *API) handleReboot(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, http.StatusOK, struct{}{})
 }
 
-
 func execCPUManagerCommand[T any, C cpumanager.Command](ctx context.Context, m *cpumanager.CPUManager, cmd C, reply chan cpumanager.Result[T]) (T, string, string, error) {
 	res, err := cpumanager.Ask(ctx, m, cmd, reply)
 	if err != nil {
@@ -160,13 +159,13 @@ func execCPUManagerCommand[T any, C cpumanager.Command](ctx context.Context, m *
 func statusFromCPUManagerCode(code string) int {
 	switch code {
 	case cpumanager.ErrCodeAlreadyDeployed:
-		return http.StatusOK
+		return http.StatusConflict
+	case cpumanager.ErrCodeArtifactInvalid:
+		return http.StatusBadRequest
 	case cpumanager.ErrCodeInvalidCoreOSEntityName:
 		return http.StatusBadRequest
 	case cpumanager.ErrCodeEntityUpdateInProgress, cpumanager.ErrCodeMenderBusy:
-		return http.StatusConflict
-	case cpumanager.ErrCodeStartUpdateFailed:
-		return http.StatusInternalServerError
+		return http.StatusPreconditionFailed
 	default:
 		return http.StatusInternalServerError
 	}

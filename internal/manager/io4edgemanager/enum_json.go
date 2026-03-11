@@ -11,7 +11,6 @@ var (
 	errUnsupportedEnumJSONEncoding = errors.New("unsupported enum JSON encoding")
 )
 
-
 func (d DeployStatusCode) String() string {
 	switch d {
 	case DeployStatusCodeNeverDeployed:
@@ -66,4 +65,3 @@ func parseDeployStatusCodeText(value string) (DeployStatusCode, bool) {
 		return 0, false
 	}
 }
-

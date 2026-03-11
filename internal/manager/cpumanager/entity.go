@@ -22,8 +22,6 @@ type entity struct {
 	DeployingNV    NameVersion // the version that is being deployed, empty if no deployment in progress
 }
 
-
-
 func newEntity(name string, entityType entityType) *entity {
 	e := &entity{
 		Name:           name,
@@ -163,7 +161,6 @@ func (e *entity) isDeployed(expected NameVersion) (bool, error) {
 	}
 	return deployedNV.Name == expected.Name && deployedNV.Version == expected.Version, nil
 }
-
 
 func (m *CPUManager) restartPendingEntityUpdate() {
 	e := m.getEntityInProgress()

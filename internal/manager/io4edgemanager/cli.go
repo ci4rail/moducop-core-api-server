@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	scanTimeout = 10 * time.Second
+	scanTimeout  = 10 * time.Second
 	getFwTimeout = 5 * time.Second
 )
 
@@ -31,7 +31,7 @@ func (m *Io4edgeManager) runIo4edgeCLI(timeout time.Duration, args ...string) (s
 }
 
 // scanDevices calls io4edge-cli scan to get list of devices
-func (m *Io4edgeManager) scanDevices()([]string, error){
+func (m *Io4edgeManager) scanDevices() ([]string, error) {
 	stdout, stderr, err := m.runIo4edgeCLI(scanTimeout, "scan")
 	if err != nil {
 		m.logger.Errorf("io4edge-cli scan failed: %v, stderr: %s", err, stderr)

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	issueFilePath = "/etc/issue"
+	issueFilePath    = "/etc/issue"
 	menderAppRootDir = "/data/mender-app"
 )
 

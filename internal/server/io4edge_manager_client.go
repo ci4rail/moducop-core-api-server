@@ -97,11 +97,11 @@ func execIo4edgeManagerCommand[T any, C io4edgemanager.Command](ctx context.Cont
 func statusFromIO4EdgeManagerCode(code string) int {
 	switch code {
 	case io4edgemanager.ErrCodeAlreadyDeployed:
-		return http.StatusOK
+		return http.StatusConflict
 	case io4edgemanager.ErrCodeArtifactInvalid, io4edgemanager.ErrCodeDeviceNotFound:
 		return http.StatusBadRequest
 	case io4edgemanager.ErrCodeDeviceUpdateInProgress:
-		return http.StatusConflict
+		return http.StatusPreconditionFailed
 	default:
 		return http.StatusInternalServerError
 	}
