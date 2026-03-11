@@ -80,6 +80,8 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET "+apiPrefix+"/software/core-os", a.handleGetCoreOS)
 	mux.HandleFunc("PUT "+apiPrefix+"/software/application/{applicationname}", a.handleLoadApplication)
 	mux.HandleFunc("GET "+apiPrefix+"/software/application/{applicationname}", a.handleGetApplication)
+	mux.HandleFunc("GET "+apiPrefix+"/software/applications", a.handleListApplications)
+	mux.HandleFunc("POST "+apiPrefix+"/system/reboot", a.handleReboot)
 	return mux
 }
 

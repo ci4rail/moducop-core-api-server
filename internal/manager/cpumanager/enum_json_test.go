@@ -9,7 +9,7 @@ import (
 func TestPersistentStateMarshalsEnumsAsStrings(t *testing.T) {
 	t.Parallel()
 
-	state := persistenState{
+	state := persistentState{
 		MenderState: menderPersistentState{
 			State:             menderStateInstalling,
 			CurrentArtifact:   "/tmp/update.mender",
@@ -70,7 +70,7 @@ func TestPersistentStateUnmarshalRejectsNumericEnums(t *testing.T) {
 		}
 	}`
 
-	var state persistenState
+	var state persistentState
 	if err := json.Unmarshal([]byte(legacy), &state); err == nil {
 		t.Fatalf("Unmarshal() error = nil, want error")
 	}

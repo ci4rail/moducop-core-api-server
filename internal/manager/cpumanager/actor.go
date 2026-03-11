@@ -18,7 +18,7 @@ const (
 	updateStartTimeout = 10 * time.Minute
 )
 
-type persistenState struct {
+type persistentState struct {
 	MenderState menderPersistentState
 	Entities    map[string]*entity // key: entity name, value: entity
 	BootID      string
@@ -28,8 +28,8 @@ type CPUManager struct {
 	logger *loglite.Logger
 	inbox  chan Command
 	quit   chan struct{}
-	store  *diskstate.Store[persistenState]
-	state  persistenState
+	store  *diskstate.Store[persistentState]
+	state  persistentState
 	mender *menderManager
 }
 
@@ -38,7 +38,7 @@ func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 		logger: loglite.New("cpumanager", os.Stdout, logLevel),
 		inbox:  make(chan Command, inboxSize),
 		quit:   make(chan struct{}),
-		store:  diskstate.New[persistenState](persistentPath),
+		store:  diskstate.New[persistentState](persistentPath),
 	}
 	hasRebooted := false
 	if err := m.store.Load(context.Background(), &m.state); err != nil {
@@ -64,7 +64,6 @@ func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 	return m, nil
 }
 
-
 func (m *CPUManager) loop() {
 	for {
 		select {
@@ -88,8 +87,10 @@ func (m *CPUManager) handleCommand(cmd Command) {
 		m.handleEntityUpdate(c.AppName, entityTypeApplication, c.PathToMenderFile, c.Reply)
 	case GetApplicationState:
 		m.handleGetEntityState(c.AppName, c.Reply)
+	case ListApplications:
+		m.handleListApplications(c.Reply)
 	case Reboot:
-		m.logger.Debugf("Reboot not implemented yet: %+v", c)
+		m.handleReboot(c.Reply)
 	case MenderEvent:
 		m.handleMenderEvent(c)
 	default:
@@ -216,12 +217,31 @@ func (m *CPUManager) handleGetEntityState(entityName string, reply chan Result[E
 	// 	return
 	// }
 	reply <- Result[EntityStatus]{Value: EntityStatus{
-		DeployStatus:   e.DeployStatus,
-		Current: NameVersion {
+		DeployStatus: e.DeployStatus,
+		Current: NameVersion{
 			nv.Name,
 			nv.Version,
-		},   
+		},
 	}}
+}
+
+func (m *CPUManager) handleListApplications(reply chan Result[[]string]) {
+	apps, err := listApplicationsFromTargetFS()
+	if err != nil {
+		m.logger.Errorf("Failed to list applications: %v", err)
+		reply <- Result[[]string]{Err: NewCodedError(
+			ErrCodeListApplicationsFailed,
+			fmt.Sprintf("failed to list applications: %v", err),
+		)}
+		return
+	}
+	reply <- Result[[]string]{Value: apps}
+}
+
+func (m *CPUManager) handleReboot(reply chan Result[struct{}]) {
+	m.logger.Infof("Rebooting system as requested by API")
+	m.mender.runRebootInBackGround(rebootTimeout)
+	reply <- Result[struct{}]{}
 }
 
 func (m *CPUManager) handleMenderJobFinished(success bool, message string) {
@@ -260,7 +280,7 @@ func (m *CPUManager) hasRebooted() bool {
 }
 
 func (m *CPUManager) setInitialPersistentState() {
-	m.state = persistenState{
+	m.state = persistentState{
 		Entities: make(map[string]*entity),
 	}
 	m.state.Entities[coreOSEntity] = newEntity(coreOSEntity, entityTypeCoreOs)
@@ -294,5 +314,3 @@ func (m *CPUManager) saveState() {
 		m.logger.Errorf("Failed to save state: %v", err)
 	}
 }
-
-

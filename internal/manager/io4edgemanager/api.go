@@ -1,4 +1,4 @@
-package cpumanager
+package io4edgemanager
 
 import "context"
 
@@ -15,7 +15,6 @@ type DeployStatusCode int
 
 const (
 	DeployStatusCodeNeverDeployed DeployStatusCode = iota
-	DeployStatusCodeWaiting                        // for mender to become available for update
 	DeployStatusCodeAlreadyDeployed
 	DeployStatusCodeInProgress
 	DeployStatusCodeSuccess
@@ -32,65 +31,48 @@ type NameVersion struct {
 	Version string `json:"version"`
 }
 
-type EntityStatus struct {
+type Io4edgeFWStatus struct {
 	DeployStatus DeployStatus `json:"deploy_status"`
 	Current      NameVersion  `json:"current"`
 }
 
-type StartCoreOsUpdate struct {
-	// path to the mender file to be installed
-	PathToMenderFile string
+type StartUpdate struct {
+	// Device Name to be updated
+	DeviceName string
+	// path to firmware package to be installed
+	PathToFWPKG string
 	// channel where the result of the command will be sent back
 	Reply chan Result[struct{}]
 }
 
-func (StartCoreOsUpdate) isCommand() {}
+func (StartUpdate) isCommand() {}
 
-type GetCoreOsState struct {
-	Reply chan Result[EntityStatus]
-}
-
-func (GetCoreOsState) isCommand() {}
-
-type StartApplicationUpdate struct {
-	AppName string
-	// path to the mender file to be installed
-	PathToMenderFile string
+type GetState struct {
+	// Device Name to get the state for
+	DeviceName string
 	// channel where the result of the command will be sent back
-	Reply chan Result[struct{}]
+	Reply chan Result[Io4edgeFWStatus]
 }
 
-func (StartApplicationUpdate) isCommand() {}
+func (GetState) isCommand() {}
 
-type GetApplicationState struct {
-	AppName string
-	Reply   chan Result[EntityStatus]
-}
-
-func (GetApplicationState) isCommand() {}
-
-type ListApplications struct {
+type ListDeviceNames struct {
 	Reply chan Result[[]string]
 }
 
-func (ListApplications) isCommand() {}
-
-type Reboot struct {
-	Reply chan Result[struct{}]
-}
-
-func (Reboot) isCommand() {}
+func (ListDeviceNames) isCommand() {}
 
 // internal commands can be defined here, e.g. for handling events
-type MenderEvent struct {
-	event menderEvent
+type cliEvent struct {
+	Success bool
+	Message string
 }
 
-func (MenderEvent) isCommand() {}
+func (cliEvent) isCommand() {}
 
 // Ask sends a command to the manager's inbox and waits for the result on the reply channel. It returns an error
 // if the context is done before the command is sent or before the result is received.
-func Ask[T any](ctx context.Context, m *CPUManager, cmd Command, reply <-chan Result[T]) (T, error) {
+func Ask[T any](ctx context.Context, m *Io4edgeManager, cmd Command, reply <-chan Result[T]) (T, error) {
 	var zero T
 
 	select {

@@ -83,3 +83,19 @@ func appVersionFromData(data string) (string, error) {
 	}
 	return "", fmt.Errorf("invalid format for .env data")
 }
+
+func listApplicationsFromTargetFS() ([]string, error) {
+	// list directories in /data/mender-app. Exclude directories ending with -previous
+	appsDir := prefixfs.Path(menderAppRootDir)
+	entries, err := os.ReadDir(appsDir)
+	if err != nil {
+		return nil, fmt.Errorf("read applications directory: %w", err)
+	}
+	var apps []string
+	for _, entry := range entries {
+		if entry.IsDir() && !strings.HasSuffix(entry.Name(), "-previous") {
+			apps = append(apps, entry.Name())
+		}
+	}
+	return apps, nil
+}

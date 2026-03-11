@@ -115,6 +115,37 @@ func (a *API) handleGetApplication(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, http.StatusOK, res)
 }
 
+func (a *API) handleListApplications(w http.ResponseWriter, r *http.Request) {
+	reply := make(chan cpumanager.Result[[]string], 1)
+	res, code, message, err := execCPUManagerCommand(r.Context(), a.cpuManager,
+		cpumanager.ListApplications{
+			Reply: reply,
+		},
+		reply,
+	)
+	if err != nil {
+		a.writeJSONError(w, statusFromCPUManagerCode(code), code, message)
+		return
+	}
+	a.writeJSON(w, http.StatusOK, res)
+}
+
+func (a *API) handleReboot(w http.ResponseWriter, r *http.Request) {
+	reply := make(chan cpumanager.Result[struct{}], 1)
+	_, code, message, err := execCPUManagerCommand(r.Context(), a.cpuManager,
+		cpumanager.Reboot{
+			Reply: reply,
+		},
+		reply,
+	)
+	if err != nil {
+		a.writeJSONError(w, statusFromCPUManagerCode(code), code, message)
+		return
+	}
+	a.writeJSON(w, http.StatusOK, struct{}{})
+}
+
+
 func execCPUManagerCommand[T any, C cpumanager.Command](ctx context.Context, m *cpumanager.CPUManager, cmd C, reply chan cpumanager.Result[T]) (T, string, string, error) {
 	res, err := cpumanager.Ask(ctx, m, cmd, reply)
 	if err != nil {

@@ -1,4 +1,4 @@
-package cpumanager
+package io4edgemanager
 
 import (
 	"errors"
@@ -6,14 +6,10 @@ import (
 )
 
 const (
-	ErrCodeInvalidCoreOSEntityName = "cpm-0001"
-	ErrCodeEntityUpdateInProgress  = "cpm-0002"
-	ErrCodeMenderBusy              = "cpm-0003"
-	ErrCodeStartUpdateFailed       = "cpm-0004"
-	ErrCodeAlreadyDeployed         = "cpm-0005"
-	ErrCodeArtifactInvalid         = "cpm-0006"
-	ErrCodeGetVersionFailed        = "cpm-0007"
-	ErrCodeListApplicationsFailed  = "cpm-0008"
+	ErrCodeDeviceUpdateInProgress  = "io4e-0001"
+	ErrCodeAlreadyDeployed         = "io4e-0002"
+	ErrCodeArtifactInvalid         = "io4e-0003"
+	ErrCodeDeviceNotFound          = "io4e-0004"
 )
 
 type CodedError interface {

@@ -5,8 +5,12 @@ CPUManager
 [x] endpoint PUT software/core-os
 [x] endpoint GET software/core-os
 [x] endpoint GET software/application
-[ ] endpoint GET software/firmware
+[ ] endpoint GET software/applications  -- list applications
+[ ] endpoint GET software/io4edge/{devicename}
+[ ] endpoint PUT software/io4edge/{devicename}
 [ ] endpoint GET hardware
+[ ] endpoint GET hardware/io4edge-devices  -- list io4edge devices
+[ ] endpoint POST system/reboot
 
 [ ] io4edge Manager
 
