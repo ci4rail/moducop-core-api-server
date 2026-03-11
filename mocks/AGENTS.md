@@ -224,3 +224,63 @@ Moducop-CPU01_Standard-Image_v2.6.0.f457f6d.20260210.1540
 ### boot_id simulation
 
 All commands that simulate a reboot should update the /proc/sys/kernel/random/boot_id file with a new random UUID to simulate a new boot. (reboot and mender-update after hitting the error injection point that simulates a reboot)
+
+
+### io4edge-cli command
+
+In reality, io4edge-cli manages "io4edge" devices. I.e. it can read hw and fw version, and can update the firmware. For the mock, we only need to simulate the following commands:
+
+Each device has a device id which is used to address the device in the network.
+Simulate 5 devices, named
+- S100-IUO16-USB-EXT1-UC1
+- S100-IUO16-USB-EXT1-UC2
+- S100-IUO16-USB-EXT1-UC3
+- S100-IUO16-USB-EXT1-UC4
+- S100-IUO16-USB-EXT1-UC5
+
+For the mock, we only need to simulate the following commands:
+
+$ io4edge-cli -d S100-IUO16-USB-EXT1-UC1 fw
+Firmware name: fw_iou016_default, Version 1.0.0
+
+-> report here last updated firmware version for each device. Initially, report 1.0.0
+
+$ io4edge-cli -d S100-IUO16-USB-EXT1-UC1 hw
+Hardware name: S100-IUO16-00-00001, rev: 0, serial: b4e31793-f660-4e2e-af20-c175186b95be
+
+-> just return a different serial for each device, and the same hardware name and revision.
+
+$ io4edge-cli -d S100-IUO16-USB-EXT1-UC1  load-firmware fw_iou016_default-1.2.0.fwpkg
+
+The fwpkg file is a tar file containing
+./manifest.json
+fw-iou16-00-default.bin
+
+manifest.json contains:
+{
+  "name": "iou16-00-default",
+  "version": "1.0.0-rc.4",
+  "file": "fw-iou16-00-default.bin",
+  "compatibility": {
+    "hw": "s100-iou16",
+    "major_revs": [
+      1
+    ]
+  }
+}
+
+load shall take around 10 seconds to complete, and print progress every second. After successful load, it should print the just loaded firmware
+
+```
+Reconnecting to restarted device.
+Firmware name: fw_iou016_default, Version 1.0.2
+```
+
+io4edge-cli scan shall list all known devices.
+$ io4edge-cli scan
+DEVICE ID               IP              HARDWARE        SERIAL
+S100-IUO16-USB-EXT1-UC1 192.168.200.1   s100-iou16      b4e31793-f660-4e2e-af20-c175186b95be
+S100-IUO16-USB-EXT1-UC2 192.168.201.1   s100-iou16      <serial>
+...
+
+### ee-inv

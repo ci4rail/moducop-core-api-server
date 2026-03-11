@@ -5,6 +5,7 @@ Library    Process
 Library    OperatingSystem
 Suite Setup    Setup Environment
 Suite Teardown    Clear Environment
+Test Tags  mender
 
 *** Variables ***
 ${STATE_DIR}    ${EXECDIR}/tests/mock-mender-state
