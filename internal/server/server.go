@@ -10,6 +10,7 @@ import (
 
 	"github.com/ci4rail/moducop-core-api-server/internal/loglite"
 	"github.com/ci4rail/moducop-core-api-server/internal/manager/cpumanager"
+	"github.com/ci4rail/moducop-core-api-server/internal/manager/io4edgemanager"
 	"github.com/ci4rail/moducop-core-api-server/internal/prefixfs"
 )
 
@@ -18,7 +19,7 @@ const (
 	updateFilePath              = "/data/core-api-server/updates/"
 	dirModeDefault              = 0o755
 	readHeaderTO                = 5 * time.Second
-	readTO                      = 30 * time.Second
+	readTO                      = 300 * time.Second
 	writeTO                     = 30 * time.Second
 	idleTO                      = 60 * time.Second
 	errUnknown                  = "api-0000"
@@ -27,11 +28,13 @@ const (
 	errCodeReadBodyFailed       = "api-0003"
 	errCodeFinalizeFileFailed   = "api-0004"
 	errCodeWriteErrorJSONFailed = "api-0005"
+	errCodeEeInvFailed          = "api-0006"
 )
 
 type API struct {
-	cpuManager *cpumanager.CPUManager
-	logger     *loglite.Logger
+	cpuManager     *cpumanager.CPUManager
+	io4edgeManager *io4edgemanager.Io4edgeManager
+	logger         *loglite.Logger
 }
 
 type errorPayload struct {
@@ -39,10 +42,11 @@ type errorPayload struct {
 	Message string `json:"message"`
 }
 
-func Start(address string, cpuManager *cpumanager.CPUManager, logLevel loglite.Level) {
+func Start(address string, cpuManager *cpumanager.CPUManager, io4edgeManager *io4edgemanager.Io4edgeManager, logLevel loglite.Level) {
 	a := &API{
-		cpuManager: cpuManager,
-		logger:     loglite.New("server", os.Stdout, logLevel),
+		cpuManager:     cpuManager,
+		io4edgeManager: io4edgeManager,
+		logger:         loglite.New("server", os.Stdout, logLevel),
 	}
 	handler := a.routes()
 	if err := ensureUpdateFilePath(); err != nil {
@@ -82,6 +86,10 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET "+apiPrefix+"/software/application/{applicationname}", a.handleGetApplication)
 	mux.HandleFunc("GET "+apiPrefix+"/software/applications", a.handleListApplications)
 	mux.HandleFunc("POST "+apiPrefix+"/system/reboot", a.handleReboot)
+	mux.HandleFunc("GET "+apiPrefix+"/software/io4edge/{devicename}", a.handleGetIo4EdgeSoftware)
+	mux.HandleFunc("PUT "+apiPrefix+"/software/io4edge/{devicename}", a.handleLoadIo4EdgeSoftware)
+	mux.HandleFunc("GET "+apiPrefix+"/hardware", a.handleGetHardwareInfo)
+	mux.HandleFunc("GET "+apiPrefix+"/hardware/io4edge-devices", a.handleListIo4EdgeDevices)
 	return mux
 }
 

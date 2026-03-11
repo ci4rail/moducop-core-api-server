@@ -11,13 +11,15 @@ import (
 
 	"github.com/ci4rail/moducop-core-api-server/internal/loglite"
 	"github.com/ci4rail/moducop-core-api-server/internal/manager/cpumanager"
+	"github.com/ci4rail/moducop-core-api-server/internal/manager/io4edgemanager"
 	"github.com/ci4rail/moducop-core-api-server/internal/prefixfs"
 	"github.com/ci4rail/moducop-core-api-server/internal/server"
 )
 
 const (
 	defaultServerAddress = ":8090"
-	persistentStatePath  = "/data/core-api-server/cpumanager-state.json"
+	cpuManagerPersistentStatePath  = "/data/core-api-server/cpumanager-state.json"
+	io4edgeManagerPersistentStatePath = "/data/core-api-server/io4edgemanager-state.json"
 	exitCodeUsageError   = 2
 	dirModeDefault       = 0o755
 )
@@ -39,7 +41,7 @@ func main() {
 		os.Exit(exitCodeUsageError)
 	}
 
-	statePath := prefixfs.Path(persistentStatePath)
+	statePath := prefixfs.Path(cpuManagerPersistentStatePath)
 	if err := os.MkdirAll(filepath.Dir(statePath), dirModeDefault); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create state directory: %v\n", err)
 		os.Exit(1)
@@ -51,7 +53,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	server.Start(*serverAddress, cpuManager, logLevel)
+	io4edgeManager, err := io4edgemanager.New(prefixfs.Path(io4edgeManagerPersistentStatePath), logLevel)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize io4edge manager: %v\n", err)
+		os.Exit(1)
+	}
+	
+	server.Start(*serverAddress, cpuManager, io4edgeManager, logLevel)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
