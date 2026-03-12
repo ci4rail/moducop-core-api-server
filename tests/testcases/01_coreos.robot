@@ -27,4 +27,4 @@ Initial CoreOS Update Shall Pass
 CoreOS Already Deployed Update Shall be NOP
     ${response}=    Load Artifact  ${API_URL}/software/core-os  
     ...    ${ASSET_DIR}/Moducop-CPU01_Standard-Image_v2.7.0.40ee657.20260218.1208.mender
-    Check Error Status from Response  ${response}   200   cpm-0005
+    Check Error Status from Response  ${response}   409   cpm-0005

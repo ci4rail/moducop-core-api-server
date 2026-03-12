@@ -8,32 +8,25 @@ type io4edgeDevice struct {
 	CurrentNV    NameVersion // the currently installed firmware version
 }
 
-func (m *Io4edgeManager) getDeviceInProgress() *io4edgeDevice {
-	for _, d := range m.state.Devices {
-		if d.DeployStatus.Code == DeployStatusCodeInProgress {
-			return d
-		}
-	}
-	return nil
-}
-
-func (m *Io4edgeManager) startUpdate(deviceName string) {
-	m.runIo4edgeCLIInBackGround(updateFirmwareTimeout, "-d", deviceName, "load-firmware", m.state.Devices[deviceName].FwPackage)
-}
-
 func (m *Io4edgeManager) initDeviceStates() {
-	// if there was an update in progress, restart it
-	if d := m.getDeviceInProgress(); d != nil {
-		m.logger.Infof("Resuming in-progress update for device %s", d.Name)
-		m.startUpdate(d.Name)
-	}
-
 	// get list of devices
 	devices, err := m.scanDevices()
 	if err != nil {
 		m.logger.Errorf("Failed to scan devices: %v", err)
 		return
 	}
+
+	m.removeNoLongerPresentDevices(devices)
+
+	// if there was an update in progress, restart it
+	for d := range m.state.Devices {
+		if m.state.Devices[d].DeployStatus.Code == DeployStatusCodeInProgress {
+			m.logger.Infof("Resuming in-progress update for device %s", d)
+			m.startUpdate(d)
+		}
+	}
+
+	// add new devices to state
 	for _, device := range devices {
 		if _, exists := m.state.Devices[device]; !exists {
 			d := &io4edgeDevice{
@@ -43,6 +36,24 @@ func (m *Io4edgeManager) initDeviceStates() {
 			d.CurrentNV = m.firmwareVersionFromDevice(d)
 			d.DeployStatus.Code = DeployStatusCodeNeverDeployed
 			m.state.Devices[device] = d
+		}
+	}
+}
+
+// remove entries from state that are no longer present
+func (m *Io4edgeManager) removeNoLongerPresentDevices(devices []string) {
+	
+	for d := range m.state.Devices {
+		found := false
+		for _, dev := range devices {
+			if dev == d {
+				found = true
+				break
+			}
+		}
+		if !found {
+			m.logger.Infof("Removing device %s from state since it is no longer present", d)
+			delete(m.state.Devices, d)
 		}
 	}
 }

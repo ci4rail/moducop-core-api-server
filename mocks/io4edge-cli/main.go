@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -149,13 +148,10 @@ func runLoadFirmware(deviceID, firmwarePath string) error {
 		return err
 	}
 
-	version := versionFromPackageName(filepath.Base(firmwarePath))
-	if version == "" {
-		if manifest.Version == "" {
-			return errors.New("firmware version not found in package name or manifest")
-		}
-		version = manifest.Version
+	if manifest.Version == "" {
+		return errors.New("firmware version not found in package name or manifest")
 	}
+	version := manifest.Version
 
 	for i := 1; i <= 10; i++ {
 		fmt.Printf("Progress: %d%%\n", i*10)
@@ -219,16 +215,4 @@ func loadFirmwareManifest(firmwarePath string) (firmwareManifest, error) {
 		return firmwareManifest{}, errors.New("invalid firmware package: missing firmware binary")
 	}
 	return manifest, nil
-}
-
-func versionFromPackageName(base string) string {
-	if !strings.HasSuffix(base, ".fwpkg") {
-		return ""
-	}
-	name := strings.TrimSuffix(base, ".fwpkg")
-	idx := strings.LastIndex(name, "-")
-	if idx <= 0 || idx == len(name)-1 {
-		return ""
-	}
-	return name[idx+1:]
 }

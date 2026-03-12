@@ -83,9 +83,9 @@ func (m *Io4edgeManager) handleCommand(cmd Command) {
 
 // handleCliEvent is triggered when io4edge-cli finished. Currently only for device updates
 func (m *Io4edgeManager) handleCliEvent(event cliEvent) {
-	d := m.getDeviceInProgress()
-	if d == nil {
-		m.logger.Warnf("Received CLI event but no device is in progress: %v", event)
+	d, ok := m.state.Devices[event.DeviceName]
+	if !ok {
+		m.logger.Errorf("device %s not found in state", event.DeviceName)
 		return
 	}
 	m.logger.Infof("Handling CLI event (update done on %s): %v", d.Name, event)

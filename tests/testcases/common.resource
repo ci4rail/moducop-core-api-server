@@ -18,7 +18,7 @@ Start SUT
 Load Artifact
     [Arguments]    ${URL}   ${artifact_path}
     ${file_data}=    Get Binary File    ${artifact_path}
-    ${response}=    PUT   ${URL}   data=${file_data}
+    ${response}=    PUT   ${URL}   data=${file_data}  expected_status=any
     RETURN    ${response}
 
 Wait for Update
@@ -41,8 +41,14 @@ Check Update Finished
 Check Current Version
     [Arguments]    ${URL}  ${expected_name}   ${expected_version}
     ${response}=    GET   ${URL}  expected_status=any
-    Log To Console   ${response.json()} ${response.status_code}
     Should Be Equal As Integers    ${response.status_code}    200
+    Log To Console   ${response.json()} ${response.status_code}
+    Check Current Version from Response   ${response}  ${expected_name}   ${expected_version}
+
+Check Current Version from Response
+    [Arguments]    ${response}  ${expected_name}   ${expected_version}
+    Should Be Equal As Integers    ${response.status_code}    200
+    Log To Console   ${response.json()} ${response.status_code}
     Should Be Equal as Strings    ${response.json()['current']['name']}    ${expected_name}
     Should Be Equal as Strings    ${response.json()['current']['version']}    ${expected_version}
 
@@ -64,3 +70,13 @@ Check Deploy Status from Response
     IF    $expected_message is not None
         Should Be Equal as Strings    ${response.json()['deploy_status']['message']}    ${expected_message}
     END
+
+Check Current Version And Deploy Status
+    [Arguments]    ${URL}  ${expected_name}   ${expected_version}  ${expected_code}  ${expected_message}=${NONE}
+    ${response}=    GET   ${URL}  expected_status=any
+    Should Be Equal As Integers    ${response.status_code}    200
+    Log To Console   ${response.json()} ${response.status_code}
+    Should Be Equal as Strings    ${response.json()['current']['name']}    ${expected_name}
+    Should Be Equal as Strings    ${response.json()['current']['version']}    ${expected_version}
+    Check Deploy Status from Response   ${response}  ${expected_code}  ${expected_message}
+

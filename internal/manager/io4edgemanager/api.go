@@ -64,6 +64,7 @@ func (ListDeviceNames) isCommand() {}
 
 // internal commands can be defined here, e.g. for handling events
 type cliEvent struct {
+	DeviceName string
 	Success bool
 	Message string
 }
