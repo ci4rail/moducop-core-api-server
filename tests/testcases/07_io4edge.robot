@@ -102,10 +102,7 @@ Server Restart While Update Shall Shall Result in Update Resume
     Log To Console    ${response.text} ${response.status_code} 
     Should Be Equal As Integers    ${response.status_code}    202
 
-    Sleep  2s
-    Terminate All Processes
-    Start SUT
-    Sleep  3s
+    Crash and Restart SUT
 
     ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV_BASE_NAME}4  timeout=20s
     Check Current Version And Deploy Status  ${API_URL}/software/io4edge/${DEV_BASE_NAME}4  

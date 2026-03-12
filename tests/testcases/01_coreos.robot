@@ -17,7 +17,7 @@ Initial CoreOS Update Shall Pass
     Log To Console    ${response.text} ${response.status_code} 
     Should Be Equal As Integers    ${response.status_code}    202
 
-    ${status_response}=    Wait for Update    ${API_URL}/software/core-os  timeout=60s
+    ${status_response}=    Wait for Update    ${API_URL}/software/core-os  timeout=600s
 
     Check Current Version   ${API_URL}/software/core-os   
     ...    cpu01-standard

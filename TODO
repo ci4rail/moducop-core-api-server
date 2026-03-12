@@ -1,18 +1,18 @@
 CPUManager
 [x] detect reboot
 [x] handle crash/restart of api-server
-[ ] mender app recovery
+[ ] mender inconsistent state handling
 [x] endpoint PUT software/core-os
 [x] endpoint GET software/core-os
 [x] endpoint GET software/application
-[ ] endpoint GET software/applications  -- list applications
-[ ] endpoint GET software/io4edge/{devicename}
-[ ] endpoint PUT software/io4edge/{devicename}
-[ ] endpoint GET hardware
-[ ] endpoint GET hardware/io4edge-devices  -- list io4edge devices
-[ ] endpoint POST system/reboot
+[x] endpoint GET software/applications  -- list applications
+[x] endpoint GET software/io4edge/{devicename}
+[x] endpoint PUT software/io4edge/{devicename}
+[x] endpoint GET hardware
+[x] endpoint GET hardware/io4edge-devices  -- list io4edge devices
+[x] endpoint POST system/reboot
 
-[ ] io4edge Manager
+[x] io4edge Manager
 
 Mocks
 [x] preparefs
@@ -33,8 +33,7 @@ Real Target
 Outside this repo
 
 [ ] Repo application generation
-
-[ ] OpenAPI spec update
+[x] OpenAPI spec update
 
 [ ] user-docs
 

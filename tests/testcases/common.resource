@@ -3,17 +3,30 @@
 Library   OperatingSystem
 Library      RequestsLibrary
 Library  Process
+Library  SSHLibrary
 
 *** Variables ***
+${DUT_IP}       ${EMPTY}
 ${API_URL}        http://localhost:8090/api/v1
 ${ASSET_DIR}      ${EXECDIR}/assets
 ${STATE_DIR}      ${EXECDIR}/../mock-mender-state
 ${SUT_LOGFILE}    ${EXECDIR}/results/sut.log
+${SIMULATION_MODE}  true
 
 *** Keywords ***
 
 Start SUT
-    Start Process  ./run_sim_endless.sh  shell=True  stdout=${SUT_LOGFILE}  stderr=${SUT_LOGFILE}
+    IF  '$SIMULATION_MODE == true'    
+        Start Process  ./run_sim_endless.sh  shell=True  stdout=${SUT_LOGFILE}  stderr=${SUT_LOGFILE}
+    END
+
+Crash and Restart SUT
+    IF  '$SIMULATION_MODE == true'    
+        Sleep  1.5s
+        Terminate All Processes
+        Start SUT
+        Sleep  3s
+    END
 
 Load Artifact
     [Arguments]    ${URL}   ${artifact_path}

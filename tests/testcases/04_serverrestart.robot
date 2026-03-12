@@ -12,11 +12,7 @@ Crash During Update Shall be Recovered
     Log To Console    ${response.text} ${response.status_code} 
     Should Be Equal As Integers    ${response.status_code}    202
 
-    # Kill && Restart Server
-    Sleep  1.5s
-    Terminate All Processes
-    Start SUT
-    Sleep  3s
+    Crash and Restart SUT
 
     ${status_response}=    Wait for Update    ${API_URL}/software/application/${APP_NAME}  timeout=10s
     Check Current Version  ${API_URL}/software/application/${APP_NAME} 

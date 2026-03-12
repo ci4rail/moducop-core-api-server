@@ -11,7 +11,7 @@ Initial Application Update Shall Pass
     Log To Console    ${response.text} ${response.status_code} 
     Should Be Equal As Integers    ${response.status_code}    202
 
-    ${status_response}=    Wait for Update    ${API_URL}/software/application/${APP_NAME}  timeout=20s
+    ${status_response}=    Wait for Update    ${API_URL}/software/application/${APP_NAME}  timeout=120s
     Check Current Version  ${API_URL}/software/application/${APP_NAME} 
     ...   nginx-demo
     ...   8f249b9
@@ -29,6 +29,7 @@ List Applications Shall Return All Applications
     @{expected_apps}=    Create List
     ...    nginx-demo
 
+    Length Should Be    ${response.json()}    1
     FOR    ${app}    IN    @{expected_apps}
         Should Contain    ${response.json()}    ${app}
     END

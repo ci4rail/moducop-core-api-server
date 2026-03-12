@@ -94,7 +94,7 @@ func appVersionFromData(data string) (string, error) {
 }
 
 func listApplicationsFromTargetFS() ([]string, error) {
-	// list directories in /data/mender-app. Exclude directories ending with -previous
+	// list directories in /data/mender-app. Exclude directories ending with -previous and -last
 	appsDir := prefixfs.Path(menderAppRootDir)
 	entries, err := os.ReadDir(appsDir)
 	if err != nil {
@@ -102,7 +102,9 @@ func listApplicationsFromTargetFS() ([]string, error) {
 	}
 	var apps []string
 	for _, entry := range entries {
-		if entry.IsDir() && !strings.HasSuffix(entry.Name(), "-previous") {
+		if entry.IsDir() &&
+			!strings.HasSuffix(entry.Name(), "-previous") &&
+			!strings.HasSuffix(entry.Name(), "-last") {
 			apps = append(apps, entry.Name())
 		}
 	}
