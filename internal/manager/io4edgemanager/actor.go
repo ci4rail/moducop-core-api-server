@@ -74,9 +74,43 @@ func (m *Io4edgeManager) handleCommand(cmd Command) {
 		m.handleGetState(c.DeviceName, c.Reply)
 	case ListDeviceNames:
 		m.handleListDeviceNames(c.Reply)
+	case cliEvent:
+		m.handleCliEvent(c)
 	default:
 		m.logger.Warnf("Received unknown command: %T", cmd)
 	}
+}
+
+// handleCliEvent is triggered when io4edge-cli finished. Currently only for device updates
+func (m *Io4edgeManager) handleCliEvent(event cliEvent) {
+	d := m.getDeviceInProgress()
+	if d == nil {
+		m.logger.Warnf("Received CLI event but no device is in progress: %v", event)
+		return
+	}
+	m.logger.Infof("Handling CLI event (update done on %s): %v", d.Name, event)
+	if event.Success {
+		// read back current firmware version
+		d.CurrentNV = m.firmwareVersionFromDevice(d)
+		if d.CurrentNV.Name == d.DeployingNV.Name && d.CurrentNV.Version == d.DeployingNV.Version {
+			d.DeployStatus = DeployStatus{
+				Code:    DeployStatusCodeSuccess,
+				Message: "Update successful",
+			}
+		} else {
+			d.DeployStatus = DeployStatus{
+				Code:    DeployStatusCodeFailure,
+				Message: fmt.Sprintf("Firmware version after update does not match expected version. Current: %s %s, Expected: %s %s", d.CurrentNV.Name, d.CurrentNV.Version, d.DeployingNV.Name, d.DeployingNV.Version),
+			}
+		}
+	} else {
+		d.DeployStatus = DeployStatus{
+			Code:    DeployStatusCodeFailure,
+			Message: fmt.Sprintf("Update failed: %s", event.Message),
+		}
+	}
+	d.FwPackage = ""
+	d.DeployingNV = NameVersion{}
 }
 
 func (m *Io4edgeManager) handleUpdate(
@@ -111,7 +145,7 @@ func (m *Io4edgeManager) handleUpdate(
 		Code:    DeployStatusCodeInProgress,
 		Message: "Update is in progress",
 	}
-	m.runIo4edgeCLIInBackGround(updateFirmwareTimeout, "-d", deviceName, "load-firmware", fwPackage)
+	m.startUpdate(dev.Name)
 	reply <- Result[struct{}]{}
 }
 
