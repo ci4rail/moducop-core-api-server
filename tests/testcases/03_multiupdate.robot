@@ -1,5 +1,6 @@
 *** Settings ***
 Resource     common.resource
+Test Tags  mender  coreos  application
 
 *** Variables ***
 ${APP_NAME}  nginx-demo 

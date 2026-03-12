@@ -42,7 +42,7 @@ type menderEvent struct {
 type menderPersistentState struct {
 	State             menderState
 	CurrentArtifact   string     // "" if no update is in progress
-	CurrentEntityType entityType // valid if CurrentFile != ""
+	CurrentEntityType entityType // valid if CurrentArtifact != ""
 }
 
 type menderManager struct {
@@ -82,6 +82,25 @@ func newMenderManager(logger *loglite.Logger, state *menderPersistentState, emit
 	}
 	if hasRebooted {
 		m.menderEmitRebootFinished("System reboot detected", nil)
+	} else {
+		// system has not rebooted since the state was loaded, so we are probably restarting after a crash. 
+		// try to restart action according to state
+		switch m.state.State {
+		case menderStateInstalling:
+			m.logger.Warnf("Mender state was installing during restart, restart install")
+			m.runMenderInstallInBackGround(m.state.CurrentArtifact, rebootTimeout)
+		case menderStateRebooting:
+			m.logger.Warnf("Mender state was rebooting during restart, restart reboot")
+			m.runRebootInBackGround(rebootTimeout)
+		case menderStateCommitting:
+			m.logger.Warnf("Mender state was committing during restart, restart commit")
+			m.runMenderCommitInBackGround(commitTimeout)
+		case menderStateIdle:
+			// nothing to do
+		default:
+			m.logger.Warnf("Mender state was unknown (%d) during restart, resetting to idle", m.state.State)
+			m.setIdle()
+		}
 	}
 	return m
 }

@@ -72,3 +72,43 @@ Damaged Firmware Update Shall be Rejected
     Log To Console    ${response.text} ${response.status_code} 
     Should Be Equal As Integers    ${response.status_code}    400
 
+
+Parallel Updates on different Devices Shall Pass
+    ${response}=    Load Artifact  ${API_URL}/software/io4edge/${DEV_BASE_NAME}2  
+    ...    ${ASSET_DIR}/fw-iou16-00-default-1.0.2.fwpkg
+    Log To Console    ${response.text} ${response.status_code} 
+    Should Be Equal As Integers    ${response.status_code}    202
+
+    ${response}=    Load Artifact  ${API_URL}/software/io4edge/${DEV_BASE_NAME}3  
+    ...    ${ASSET_DIR}/fw-iou16-00-default-1.0.3.fwpkg
+    Log To Console    ${response.text} ${response.status_code} 
+    Should Be Equal As Integers    ${response.status_code}    202    
+
+    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV_BASE_NAME}2  timeout=20s
+    Check Current Version And Deploy Status  ${API_URL}/software/io4edge/${DEV_BASE_NAME}2  
+    ...    ${FW_NAME}
+    ...    1.0.2
+    ...    success
+
+    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV_BASE_NAME}3  timeout=5s
+    Check Current Version And Deploy Status  ${API_URL}/software/io4edge/${DEV_BASE_NAME}3  
+    ...    ${FW_NAME}    
+    ...    1.0.3
+    ...    success
+
+Server Restart While Update Shall Shall Result in Update Resume
+    ${response}=    Load Artifact  ${API_URL}/software/io4edge/${DEV_BASE_NAME}4  
+    ...    ${ASSET_DIR}/fw-iou16-00-default-1.0.2.fwpkg
+    Log To Console    ${response.text} ${response.status_code} 
+    Should Be Equal As Integers    ${response.status_code}    202
+
+    Sleep  2s
+    Terminate All Processes
+    Start SUT
+    Sleep  3s
+
+    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV_BASE_NAME}4  timeout=20s
+    Check Current Version And Deploy Status  ${API_URL}/software/io4edge/${DEV_BASE_NAME}4  
+    ...    ${FW_NAME}
+    ...    1.0.2
+    ...    success

@@ -166,27 +166,9 @@ func (e *entity) isDeployed(expected NameVersion) (bool, error) {
 func (m *CPUManager) restartPendingEntityUpdate() {
 	e := m.getEntityInProgress()
 	if e != nil {
-		m.logger.Warnf("Entity %s was in progress during restart, restarting update", e.Name)
-		err := m.startEntityUpdate(e)
-		if err != nil {
-			m.logger.Errorf("Failed to restart update for entity %s: %v. Setting status to failure", e.Name, err)
-			e.DeployStatus.Code = DeployStatusCodeFailure
-			e.DeployStatus.Message = fmt.Sprintf("Failed to restart update after server restart: %v", err)
-		}
+		m.logger.Warnf("Entity %s was in progress during restart, resetting to waiting", e.Name)
+		e.DeployStatus.Code = DeployStatusCodeWaiting
+		e.DeployStatus.Message = ""
 		return
 	}
-	// if there is no entity in progress, but there is an entity waiting, start it
-	waiting := m.getEntityWaiting()
-	if waiting != nil {
-		m.logger.Infof("Starting update for entity %s that was waiting during restart", waiting.Name)
-		err := m.startEntityUpdate(waiting)
-		if err != nil {
-			m.logger.Errorf("Failed to start update for entity %s that was waiting during restart: %v. Setting status to failure", waiting.Name, err)
-			waiting.DeployStatus.Code = DeployStatusCodeFailure
-			waiting.DeployStatus.Message = fmt.Sprintf("Failed to start update after server restart: %v", err)
-		}
-		return
-	}
-	// if there is no entity in progress and no entity waiting, do nothing
-	m.logger.Debugf("No pending updates to restart after server restart")
 }

@@ -51,16 +51,11 @@ func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 		m.logger.Infof("Loaded persistent state: %+v", m.state)
 		if m.hasRebooted() {
 			hasRebooted = true
-		} else {
-			// If we have loaded a state, but the system has not rebooted since then,
-			// the server has propably crashed or restarted.
-			m.handleRestart()
-		}
+		} 
 	}
 	m.saveState()
 	m.mender = newMenderManager(m.logger, &m.state.MenderState, m.emitMenderEvent, hasRebooted)
 	go m.loop()
-	m.restartPendingEntityUpdate()
 	return m, nil
 }
 
@@ -267,10 +262,10 @@ func (m *CPUManager) handleMenderJobFinished(success bool, message string) {
 	e := m.getEntityInProgress()
 	if e == nil {
 		m.logger.Warnf("Mender job finished with success=%v, message=%s, but no entity was marked as in progress", success, message)
-		return
+	} else {
+		// finish current update
+		m.finishEntityUpdate(e, success, message)
 	}
-	// finish current update
-	m.finishEntityUpdate(e, success, message)
 	// start next waiting update
 	waiting := m.getEntityWaiting()
 	if waiting != nil {
@@ -315,16 +310,6 @@ func (m *CPUManager) setInitialPersistentState() {
 		m.state.BootID = bootid
 	}
 	m.logger.Infof("Initialized state with %+v", m.state)
-}
-
-func (m *CPUManager) handleRestart() {
-	m.logger.Warnf("Detected server restart without reboot. This may be caused by a crash or a manual restart of the server. Resetting state to avoid stuck updates.")
-
-	if m.state.MenderState.State != menderStateIdle {
-		m.logger.Warnf("Mender state was %s during restart, resetting to idle", m.state.MenderState.State.String())
-		m.state.MenderState.State = menderStateIdle
-		m.state.MenderState.CurrentArtifact = ""
-	}
 }
 
 func (m *CPUManager) saveState() {
