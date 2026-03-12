@@ -67,6 +67,7 @@ const (
 const (
 	rebootTimeout = 30 * time.Second
 	commitTimeout = 30 * time.Second
+	rebootDelay   = 3 * time.Second
 )
 
 var (
@@ -130,7 +131,7 @@ func (m *menderManager) runMenderCommitInBackGround(timeout time.Duration) {
 
 func (m *menderManager) runRebootInBackGround(timeout time.Duration) {
 	go func() {
-		time.Sleep(3 * time.Second)
+		time.Sleep(rebootDelay)
 		stdout, stderr, _, err := execcli.RunCommand("reboot", timeout)
 		if err != nil {
 			message := fmt.Sprintf("Reboot command failed: stdout: %s, stderr: %s, err: %v", stdout, stderr, err)

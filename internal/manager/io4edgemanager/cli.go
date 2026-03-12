@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	scanTimeout  = 10 * time.Second
-	getFwTimeout = 5 * time.Second
+	scanTimeout      = 10 * time.Second
+	getFwTimeout     = 5 * time.Second
+	minDeviceColumns = 4
 )
 
 func (m *Io4edgeManager) runIo4edgeCLIInBackGround(timeout time.Duration, args ...string) {
@@ -54,7 +55,7 @@ func parseDevices(output string) []string {
 
 		fields := strings.Fields(line)
 		// Expected columns: DEVICE ID, IP, HARDWARE, SERIAL.
-		if len(fields) < 4 {
+		if len(fields) < minDeviceColumns {
 			continue
 		}
 

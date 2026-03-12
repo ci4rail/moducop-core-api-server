@@ -128,14 +128,7 @@ func (m *CPUManager) handleEntityUpdate(
 	menderArtifact string,
 	reply chan Result[struct{}],
 ) {
-	var err error
-	var deployed bool
-
-	if entityType == entityTypeCoreOs && entityName != coreOSEntity {
-		reply <- Result[struct{}]{Err: NewCodedError(
-			ErrCodeInvalidCoreOSEntityName,
-			fmt.Sprintf("invalid entity name for CoreOS: %s", entityName),
-		)}
+	if m.rejectInvalidCoreOSEntity(entityName, entityType, reply) {
 		return
 	}
 
@@ -144,12 +137,7 @@ func (m *CPUManager) handleEntityUpdate(
 		m.state.Entities[entityName] = newEntity(entityName, entityType)
 		e = m.state.Entities[entityName]
 	}
-	if e.DeployStatus.Code == DeployStatusCodeInProgress || e.DeployStatus.Code == DeployStatusCodeWaiting {
-		m.logger.Infof("Received update command for entity %s, but an update is already in progress or waiting", entityName)
-		reply <- Result[struct{}]{Err: NewCodedError(
-			ErrCodeEntityUpdateInProgress,
-			fmt.Sprintf("an update is already in progress or waiting for entity %s", entityName),
-		)}
+	if m.rejectUpdateInProgress(entityName, e, reply) {
 		return
 	}
 
@@ -163,16 +151,7 @@ func (m *CPUManager) handleEntityUpdate(
 		return
 	}
 
-	if deployed, err = e.isDeployed(deployingNV); err != nil {
-		m.logger.Errorf("Failed to check if artifact is already deployed for entity %s: %v. Continue", entityName, err)
-		deployed = false
-	}
-	if deployed {
-		m.logger.Infof("Received update command for entity %s, but the same version is already deployed", entityName)
-		reply <- Result[struct{}]{Err: NewCodedError(
-			ErrCodeAlreadyDeployed,
-			fmt.Sprintf("the same version is already deployed for entity %s", entityName),
-		)}
+	if m.rejectAlreadyDeployed(entityName, e, deployingNV, reply) {
 		return
 	}
 
@@ -194,6 +173,46 @@ func (m *CPUManager) handleEntityUpdate(
 	}
 
 	reply <- Result[struct{}]{}
+}
+
+func (m *CPUManager) rejectInvalidCoreOSEntity(entityName string, entityType entityType, reply chan Result[struct{}]) bool {
+	if entityType != entityTypeCoreOs || entityName == coreOSEntity {
+		return false
+	}
+	reply <- Result[struct{}]{Err: NewCodedError(
+		ErrCodeInvalidCoreOSEntityName,
+		fmt.Sprintf("invalid entity name for CoreOS: %s", entityName),
+	)}
+	return true
+}
+
+func (m *CPUManager) rejectUpdateInProgress(entityName string, e *entity, reply chan Result[struct{}]) bool {
+	if e.DeployStatus.Code != DeployStatusCodeInProgress && e.DeployStatus.Code != DeployStatusCodeWaiting {
+		return false
+	}
+	m.logger.Infof("Received update command for entity %s, but an update is already in progress or waiting", entityName)
+	reply <- Result[struct{}]{Err: NewCodedError(
+		ErrCodeEntityUpdateInProgress,
+		fmt.Sprintf("an update is already in progress or waiting for entity %s", entityName),
+	)}
+	return true
+}
+
+func (m *CPUManager) rejectAlreadyDeployed(entityName string, e *entity, deployingNV NameVersion, reply chan Result[struct{}]) bool {
+	deployed, err := e.isDeployed(deployingNV)
+	if err != nil {
+		m.logger.Errorf("Failed to check if artifact is already deployed for entity %s: %v. Continue", entityName, err)
+		return false
+	}
+	if !deployed {
+		return false
+	}
+	m.logger.Infof("Received update command for entity %s, but the same version is already deployed", entityName)
+	reply <- Result[struct{}]{Err: NewCodedError(
+		ErrCodeAlreadyDeployed,
+		fmt.Sprintf("the same version is already deployed for entity %s", entityName),
+	)}
+	return true
 }
 
 func (m *CPUManager) handleGetEntityState(entityName string, reply chan Result[EntityStatus]) {

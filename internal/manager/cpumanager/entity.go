@@ -22,6 +22,8 @@ type entity struct {
 	DeployingNV    NameVersion // the version that is being deployed, empty if no deployment in progress
 }
 
+var errUnknownEntityType = errors.New("unknown entity type")
+
 func newEntity(name string, entityType entityType) *entity {
 	e := &entity{
 		Name:           name,
@@ -112,7 +114,6 @@ func (m *CPUManager) finishEntityUpdate(e *entity, success bool, message string)
 // getDeployedVersion returns the currently deployed version for the given entity.
 // Returns nameVersion, error. "nameVersion.name" for applications is the same as the entity name
 func (e *entity) getDeployedVersion() (NameVersion, error) {
-
 	switch e.EntityType {
 	case entityTypeCoreOs:
 		name, version, err := coreOSVersionFromTargetFS()
@@ -127,7 +128,7 @@ func (e *entity) getDeployedVersion() (NameVersion, error) {
 		}
 		return NameVersion{Name: e.Name, Version: version}, nil
 	default:
-		return NameVersion{}, fmt.Errorf("unknown entity type: %v", e.EntityType)
+		return NameVersion{}, fmt.Errorf("%w: %v", errUnknownEntityType, e.EntityType)
 	}
 }
 
@@ -148,7 +149,7 @@ func (e *entity) getVersionFromArtifact(artifact string) (NameVersion, error) {
 		}
 		return NameVersion{Name: e.Name, Version: version}, nil
 	default:
-		return NameVersion{}, fmt.Errorf("unknown entity type: %v", e.EntityType)
+		return NameVersion{}, fmt.Errorf("%w: %v", errUnknownEntityType, e.EntityType)
 	}
 }
 

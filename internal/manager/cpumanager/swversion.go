@@ -1,6 +1,7 @@
 package cpumanager
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -12,6 +13,15 @@ import (
 const (
 	issueFilePath    = "/etc/issue"
 	menderAppRootDir = "/data/mender-app"
+	minIssueLines    = 2
+	issueMatchGroups = 3
+)
+
+var (
+	errIssueTooShort          = errors.New("unexpected format of /etc/issue: less than 2 lines")
+	errInvalidIssueLineFormat = errors.New("invalid format for /etc/issue line")
+	errUnexpectedIssueMatches = errors.New("unexpected regex match groups")
+	errInvalidEnvDataFormat   = errors.New("invalid format for .env data")
 )
 
 // coreOSVersionFromTargetFS reads the /etc/issue file from the target filesystem and
@@ -31,8 +41,8 @@ func coreOSVersionFromTargetFS() (string, string, error) {
 	// read second line
 	lines := string(data)
 	lineList := strings.Split(lines, "\n")
-	if len(lineList) < 2 {
-		return "", "", fmt.Errorf("unexpected format of /etc/issue: less than 2 lines")
+	if len(lineList) < minIssueLines {
+		return "", "", fmt.Errorf("%w", errIssueTooShort)
 	}
 	return coreOsVersionFromIssueLine(lineList[1])
 }
@@ -42,10 +52,10 @@ func coreOsVersionFromIssueLine(line string) (string, string, error) {
 	re := regexp.MustCompile(`^[A-Za-z0-9]+-(?P<name>.+)-Image_(?P<version>v\d+\.\d+\.\d+(?:\..+)?)$`)
 	matches := re.FindStringSubmatch(line)
 	if matches == nil {
-		return "", "", fmt.Errorf("invalid format for /etc/issue line: %s", line)
+		return "", "", fmt.Errorf("%w: %s", errInvalidIssueLineFormat, line)
 	}
-	if len(matches) != 3 {
-		return "", "", fmt.Errorf("unexpected regex match groups: %v", matches)
+	if len(matches) != issueMatchGroups {
+		return "", "", fmt.Errorf("%w: %v", errUnexpectedIssueMatches, matches)
 	}
 	name := matches[1]
 	name = strings.ToLower(name)
@@ -69,8 +79,7 @@ func appVersionFromTargetFS(appName string) (string, error) {
 }
 
 func appVersionFromData(data string) (string, error) {
-	lines := string(data)
-	lineList := strings.Split(lines, "\n")
+	lineList := strings.Split(data, "\n")
 	re := regexp.MustCompile(`^SOFTWARE_VERSION=(?P<version>.+)$`)
 
 	for _, line := range lineList {
@@ -81,7 +90,7 @@ func appVersionFromData(data string) (string, error) {
 		version := matches[1]
 		return version, nil
 	}
-	return "", fmt.Errorf("invalid format for .env data")
+	return "", fmt.Errorf("%w", errInvalidEnvDataFormat)
 }
 
 func listApplicationsFromTargetFS() ([]string, error) {

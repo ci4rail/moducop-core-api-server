@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,6 +42,8 @@ type errorPayload struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
+
+var errCommandFailed = errors.New("command failed")
 
 func Start(address string, cpuManager *cpumanager.CPUManager, io4edgeManager *io4edgemanager.Io4edgeManager, logLevel loglite.Level) {
 	a := &API{
@@ -132,9 +135,9 @@ func (a *API) writeJSONError(w http.ResponseWriter, status int, code, message st
 	}
 }
 
-func (a *API) writeJSON(w http.ResponseWriter, status int, payload any) {
+func (a *API) writeJSON(w http.ResponseWriter, payload any) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
+	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		a.logger.Errorf("%s: failed to encode response payload: %v", errCodeWriteErrorJSONFailed, err)
 	}

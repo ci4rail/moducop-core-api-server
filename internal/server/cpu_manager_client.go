@@ -53,45 +53,33 @@ func (a *API) handleGetCoreOS(w http.ResponseWriter, r *http.Request) {
 		a.writeJSONError(w, statusFromCPUManagerCode(code), code, message)
 		return
 	}
-	a.writeJSON(w, http.StatusOK, res)
+	a.writeJSON(w, res)
 }
 
 func (a *API) handleLoadApplication(w http.ResponseWriter, r *http.Request) {
-	appName := r.PathValue("applicationname")
-	if appName == "" {
-		a.writeJSONError(w, http.StatusBadRequest, errCodeBadRequest, "application name is required")
-		return
-	}
-	tmpPath, errCode, err := a.saveBodyToFile(r.Body, fmt.Sprintf("app-%s-*", appName))
-	if err != nil {
-		a.writeJSONError(w, http.StatusInternalServerError, errCode, fmt.Sprintf("failed to save update file: %v", err))
-		return
-	}
-	keepFile := false
-	defer func() {
-		if !keepFile {
-			if err := os.Remove(tmpPath); err != nil {
-				a.logger.Errorf("failed to remove temporary file %s: %v", tmpPath, err)
+	a.handleLoadNamedUpdate(
+		w,
+		r,
+		"applicationname",
+		"application name is required",
+		"app-%s-*",
+		"started application update for %s",
+		func(ctx context.Context, appName, tmpPath string) (int, string, string, error) {
+			reply := make(chan cpumanager.Result[struct{}], 1)
+			_, code, message, err := execCPUManagerCommand(ctx, a.cpuManager,
+				cpumanager.StartApplicationUpdate{
+					AppName:          appName,
+					PathToMenderFile: tmpPath,
+					Reply:            reply,
+				},
+				reply,
+			)
+			if err != nil {
+				return statusFromCPUManagerCode(code), code, message, err
 			}
-		}
-	}()
-
-	reply := make(chan cpumanager.Result[struct{}], 1)
-	_, code, message, err := execCPUManagerCommand(r.Context(), a.cpuManager,
-		cpumanager.StartApplicationUpdate{
-			AppName:          appName,
-			PathToMenderFile: tmpPath,
-			Reply:            reply,
+			return 0, "", "", nil
 		},
-		reply,
 	)
-	if err != nil {
-		a.writeJSONError(w, statusFromCPUManagerCode(code), code, message)
-		return
-	}
-	a.logger.Infof("started application update for %s", appName)
-	keepFile = true
-	w.WriteHeader(http.StatusAccepted)
 }
 
 func (a *API) handleGetApplication(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +100,7 @@ func (a *API) handleGetApplication(w http.ResponseWriter, r *http.Request) {
 		a.writeJSONError(w, statusFromCPUManagerCode(code), code, message)
 		return
 	}
-	a.writeJSON(w, http.StatusOK, res)
+	a.writeJSON(w, res)
 }
 
 func (a *API) handleListApplications(w http.ResponseWriter, r *http.Request) {
@@ -127,7 +115,7 @@ func (a *API) handleListApplications(w http.ResponseWriter, r *http.Request) {
 		a.writeJSONError(w, statusFromCPUManagerCode(code), code, message)
 		return
 	}
-	a.writeJSON(w, http.StatusOK, res)
+	a.writeJSON(w, res)
 }
 
 func (a *API) handleReboot(w http.ResponseWriter, r *http.Request) {
@@ -142,16 +130,16 @@ func (a *API) handleReboot(w http.ResponseWriter, r *http.Request) {
 		a.writeJSONError(w, statusFromCPUManagerCode(code), code, message)
 		return
 	}
-	a.writeJSON(w, http.StatusOK, struct{}{})
+	a.writeJSON(w, struct{}{})
 }
 
 func execCPUManagerCommand[T any, C cpumanager.Command](ctx context.Context, m *cpumanager.CPUManager, cmd C, reply chan cpumanager.Result[T]) (T, string, string, error) {
 	res, err := cpumanager.Ask(ctx, m, cmd, reply)
 	if err != nil {
 		if code, message, ok := cpumanager.ExtractCode(err); ok {
-			return res, code, message, fmt.Errorf("command failed: %s: %s", code, message)
+			return res, code, message, fmt.Errorf("%w: %s: %s", errCommandFailed, code, message)
 		}
-		return res, errUnknown, "", fmt.Errorf("command failed: %w", err)
+		return res, errUnknown, "", fmt.Errorf("%w: %w", errCommandFailed, err)
 	}
 	return res, "", "", err
 }

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +17,19 @@ import (
 type HeadersTypeInfo struct {
 	ArtifactProvides map[string]any `json:"artifact_provides"`
 }
+
+const rootfsMatchGroups = 3
+
+var (
+	errMissingRootfsImageVersion  = errors.New("artifact_provides missing rootfs-image.version")
+	errUnexpectedRootfsVersionTyp = errors.New("unexpected type for rootfs-image.version")
+	errInvalidRootfsVersionFormat = errors.New("invalid format for rootfs-image.version")
+	errUnexpectedRootfsMatches    = errors.New("unexpected regex match groups")
+	errMissingAppVersion          = errors.New("artifact_provides missing app version")
+	errUnexpectedAppVersionType   = errors.New("unexpected type for app version")
+	errArtifactMissingHeaderTar   = errors.New("artifact missing header.tar(.gz)")
+	errTypeInfoNotFound           = errors.New("type-info not found")
+)
 
 // CoreOSVersionFromArtifact reads the artifact file at the given path and extracts the CoreOS version
 // from the artifact_provides field in the embedded header.tar(.gz) headers/0000/type-info file.
@@ -29,11 +43,11 @@ func CoreOSVersionFromArtifact(path string) (string, string, error) {
 	}
 	provides, ok := info.ArtifactProvides["rootfs-image.version"]
 	if !ok {
-		return "", "", fmt.Errorf("artifact_provides missing rootfs-image.version")
+		return "", "", fmt.Errorf("%w", errMissingRootfsImageVersion)
 	}
 	providesStr, ok := provides.(string)
 	if !ok {
-		return "", "", fmt.Errorf("unexpected type for rootfs-image.version: %T", provides)
+		return "", "", fmt.Errorf("%w: %T", errUnexpectedRootfsVersionTyp, provides)
 	}
 	return coreOsVersionFromRootfsImageVersion(providesStr)
 }
@@ -43,10 +57,10 @@ func coreOsVersionFromRootfsImageVersion(providesStr string) (string, string, er
 	re := regexp.MustCompile(`^(?P<name>.+)-(?P<version>v\d+\.\d+\.\d+(?:\..+)?)$`)
 	matches := re.FindStringSubmatch(providesStr)
 	if matches == nil {
-		return "", "", fmt.Errorf("invalid format for rootfs-image.version: %s", providesStr)
+		return "", "", fmt.Errorf("%w: %s", errInvalidRootfsVersionFormat, providesStr)
 	}
-	if len(matches) != 3 {
-		return "", "", fmt.Errorf("unexpected regex match groups: %v", matches)
+	if len(matches) != rootfsMatchGroups {
+		return "", "", fmt.Errorf("%w: %v", errUnexpectedRootfsMatches, matches)
 	}
 	name := matches[1]
 	version := matches[2]
@@ -63,11 +77,11 @@ func AppVersionFromArtifact(path string, appName string) (string, error) {
 	}
 	provides, ok := info.ArtifactProvides[fmt.Sprintf("data-partition.%s.version", appName)]
 	if !ok {
-		return "", fmt.Errorf("artifact_provides missing %s.version", appName)
+		return "", fmt.Errorf("%w: %s.version", errMissingAppVersion, appName)
 	}
 	providesStr, ok := provides.(string)
 	if !ok {
-		return "", fmt.Errorf("unexpected type for %s.version: %T", appName, provides)
+		return "", fmt.Errorf("%w: %s.version: %T", errUnexpectedAppVersionType, appName, provides)
 	}
 	return providesStr, nil
 }
@@ -114,7 +128,7 @@ func ParseArtifactHeadersTypeInfo(path string) (HeadersTypeInfo, error) {
 	}
 
 	if len(headerTar) == 0 {
-		return info, fmt.Errorf("artifact missing header.tar(.gz)")
+		return info, fmt.Errorf("%w", errArtifactMissingHeaderTar)
 	}
 	return parseHeaderTar(bytes.NewReader(headerTar))
 }
@@ -141,22 +155,22 @@ func parseHeaderTar(r io.Reader) (HeadersTypeInfo, error) {
 		if err != nil {
 			return info, fmt.Errorf("read header tar: %w", err)
 		}
-		switch h.Name {
-		case "headers/0000/type-info":
-			b, rErr := io.ReadAll(tr)
-			if rErr != nil {
-				return info, fmt.Errorf("read headers/0000/type-info: %w", rErr)
-			}
-			if len(bytes.TrimSpace(b)) > 0 {
-				if uErr := json.Unmarshal(b, &info); uErr != nil {
-					return info, fmt.Errorf("parse headers/0000/type-info: %w", uErr)
-				}
-			}
-			hasTypeInfo = true
+		if h.Name != "headers/0000/type-info" {
+			continue
 		}
+		b, rErr := io.ReadAll(tr)
+		if rErr != nil {
+			return info, fmt.Errorf("read headers/0000/type-info: %w", rErr)
+		}
+		if len(bytes.TrimSpace(b)) > 0 {
+			if uErr := json.Unmarshal(b, &info); uErr != nil {
+				return info, fmt.Errorf("parse headers/0000/type-info: %w", uErr)
+			}
+		}
+		hasTypeInfo = true
 	}
 	if !hasTypeInfo {
-		return info, fmt.Errorf("type-info not found")
+		return info, fmt.Errorf("%w", errTypeInfoNotFound)
 	}
 	return info, nil
 }

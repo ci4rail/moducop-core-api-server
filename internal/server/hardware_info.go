@@ -11,7 +11,8 @@ import (
 
 const (
 	// TODO: This is not generic.
-	eepromSpec = "/sys/bus/i2c/devices/3-0050/eeprom@256:256"
+	eepromSpec   = "/sys/bus/i2c/devices/3-0050/eeprom@256:256"
+	eeInvTimeout = 5 * time.Second
 )
 
 type hardwareInfo struct {
@@ -30,8 +31,8 @@ func parseHardwareInfo(stdout string) (hardwareInfo, error) {
 	return info, nil
 }
 
-func (a *API) handleGetHardwareInfo(w http.ResponseWriter, r *http.Request) {
-	stdout, stderr, _, err := execcli.RunCommand("ee-inv", 5*time.Second, eepromSpec)
+func (a *API) handleGetHardwareInfo(w http.ResponseWriter, _ *http.Request) {
+	stdout, stderr, _, err := execcli.RunCommand("ee-inv", eeInvTimeout, eepromSpec)
 	if err != nil {
 		a.logger.Errorf("failed to execute ee-inv: %v, stderr: %s", err, stderr)
 		a.writeJSONError(w, http.StatusInternalServerError, errCodeEeInvFailed, fmt.Sprintf("failed to get hardware info: %v", err))
@@ -43,5 +44,5 @@ func (a *API) handleGetHardwareInfo(w http.ResponseWriter, r *http.Request) {
 		a.writeJSONError(w, http.StatusInternalServerError, errCodeEeInvFailed, fmt.Sprintf("failed to parse hardware info: %v", err))
 		return
 	}
-	a.writeJSON(w, http.StatusOK, info)
+	a.writeJSON(w, info)
 }

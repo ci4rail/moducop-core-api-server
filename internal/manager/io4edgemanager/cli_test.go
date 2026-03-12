@@ -40,7 +40,6 @@ S100-IUO16-USB-EXT1-UC1 192.168.200.1   s100-iou16      b4e31793-f660-4e2e-af20-
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -86,7 +85,6 @@ another line`,
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
