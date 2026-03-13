@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	coreOSEntity       = "coreos"
-	inboxSize          = 10
-	updateStartTimeout = 10 * time.Minute
+	coreOSEntity  = "coreos"
+	inboxSize     = 10
+	updateTimeout = 10 * time.Minute
 )
 
 type persistentState struct {
@@ -51,7 +51,7 @@ func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 		m.logger.Infof("Loaded persistent state: %+v", m.state)
 		if m.hasRebooted() {
 			hasRebooted = true
-		} 
+		}
 	}
 	m.saveState()
 	m.mender = newMenderManager(m.logger, &m.state.MenderState, m.emitMenderEvent, hasRebooted)

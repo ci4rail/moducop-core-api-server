@@ -69,7 +69,7 @@ func (m *CPUManager) getEntityWaiting() *entity {
 func (m *CPUManager) startEntityUpdate(e *entity) error {
 	e.DeployStatus.Code = DeployStatusCodeInProgress
 	e.DeployStatus.Message = "Update is in progress"
-	err := m.mender.StartUpdateJob(e.EntityType, e.MenderArtifact, updateStartTimeout)
+	err := m.mender.StartUpdateJob(e.EntityType, e.MenderArtifact, updateTimeout)
 	if err != nil {
 		e.DeployStatus.Code = DeployStatusCodeFailure
 		e.DeployStatus.Message = fmt.Sprintf("Failed to start update: %v", err)
