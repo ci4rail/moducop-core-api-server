@@ -6,7 +6,7 @@ Library  Process
 Library  SSHLibrary
 
 *** Variables ***
-${DUT_IP}       ${EMPTY}
+${DUT_IP}       \
 ${API_URL}        http://localhost:8090/api/v1
 ${ASSET_DIR}      ${EXECDIR}/assets
 ${STATE_DIR}      ${EXECDIR}/../mock-mender-state

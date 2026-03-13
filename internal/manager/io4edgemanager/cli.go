@@ -15,7 +15,7 @@ const (
 )
 
 func (m *Io4edgeManager) startUpdate(deviceName string) {
-	d, ok := m.state.Devices[deviceName] 
+	d, ok := m.state.Devices[deviceName]
 	if !ok {
 		m.logger.Errorf("device %s not found in state", deviceName)
 		return
@@ -24,15 +24,13 @@ func (m *Io4edgeManager) startUpdate(deviceName string) {
 		stdout, stderr, err := m.runIo4edgeCLI(updateFirmwareTimeout, "-d", deviceName, "load-firmware", d.FwPackage)
 		ce := cliEvent{
 			DeviceName: deviceName,
-			Success: err == nil,
-			Message: fmt.Sprintf("stdout: %s, stderr: %s, err: %v", stdout, stderr, err),
+			Success:    err == nil,
+			Message:    fmt.Sprintf("stdout: %s, stderr: %s, err: %v", stdout, stderr, err),
 		}
 		m.logger.Infof("io4edge-cli finished: %v", ce)
 		m.inbox <- ce
 	}()
 }
-
-
 
 func (m *Io4edgeManager) runIo4edgeCLI(timeout time.Duration, args ...string) (string, string, error) {
 	stdout, stderr, _, err := execcli.RunCommand("io4edge-cli", timeout, args...)

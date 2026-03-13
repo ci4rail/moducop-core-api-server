@@ -100,7 +100,7 @@ func (m *CPUManager) handleMenderEvent(cmd MenderEvent) {
 	switch cmd.event.Code {
 	case menderEventNone:
 		m.logger.Debugf("Ignoring no-op mender event")
-	case menderEventInstallFinished, menderEventRebootFinished, menderEventCommitFinished:
+	case menderEventInstallFinished, menderEventRebootFinished, menderEventCommitFinished, menderEventRestarted:
 		// pass low level events to mender manager
 		m.mender.HandleEvent(cmd.event)
 	case menderEventJobFinished:

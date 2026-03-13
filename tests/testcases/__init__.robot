@@ -12,7 +12,7 @@ Suite Teardown  Clear Environment
 *** Keywords ***
 
 Prepare Environment
-    IF  '$DUT_IP != $EMPTY' 
+    IF    "${DUT_IP}" != ""
         Log To Console    Running in non-simulation mode, using DUT IP ${DUT_IP}
         Set Global Variable  ${API_URL}  http://${DUT_IP}:8090/api/v1
         Set Global Variable  ${SIMULATION_MODE}  false

@@ -200,6 +200,9 @@ func (m *menderManager) HandleEvent(event menderEvent) {
 		m.handleRebootingEvent(event)
 	case menderStateCommitting:
 		m.handleCommittingEvent(event)
+	case menderStateRecoverInstall:
+		//TODO: handle recovery events
+		m.logger.Errorf("Received mender event while in recovery state, but recovery is not implemented: %v", event)
 	default:
 		m.logger.Warnf("Received mender event in unexpected state %d: %v", m.state.State, event)
 	}
@@ -218,7 +221,6 @@ func (m *menderManager) handleInstallingEvent(event menderEvent) {
 			if m.state.CurrentEntityType == entityTypeCoreOs {
 				m.state.State = menderStateRebooting
 				m.runRebootInBackGround(rebootTimeout)
-				return
 			} else {
 				m.state.State = menderStateCommitting
 				m.runMenderCommitInBackGround(commitTimeout)

@@ -42,7 +42,7 @@ func (m *Io4edgeManager) initDeviceStates() {
 
 // remove entries from state that are no longer present
 func (m *Io4edgeManager) removeNoLongerPresentDevices(devices []string) {
-	
+
 	for d := range m.state.Devices {
 		found := false
 		for _, dev := range devices {

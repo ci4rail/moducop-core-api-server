@@ -163,12 +163,3 @@ func (e *entity) isDeployed(expected NameVersion) (bool, error) {
 	return deployedNV.Name == expected.Name && deployedNV.Version == expected.Version, nil
 }
 
-func (m *CPUManager) restartPendingEntityUpdate() {
-	e := m.getEntityInProgress()
-	if e != nil {
-		m.logger.Warnf("Entity %s was in progress during restart, resetting to waiting", e.Name)
-		e.DeployStatus.Code = DeployStatusCodeWaiting
-		e.DeployStatus.Message = ""
-		return
-	}
-}
