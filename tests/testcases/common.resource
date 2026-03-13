@@ -93,3 +93,6 @@ Check Current Version And Deploy Status
     Should Be Equal as Strings    ${response.json()['current']['version']}    ${expected_version}
     Check Deploy Status from Response   ${response}  ${expected_code}  ${expected_message}
 
+Clear Error Injection
+    ${result}=    Run Process   mender-update   err-inject   \
+    Should Be Equal As Integers    ${result.rc}    0

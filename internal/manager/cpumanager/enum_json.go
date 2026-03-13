@@ -117,8 +117,10 @@ func (s menderState) String() string {
 		return "rebooting"
 	case menderStateCommitting:
 		return "committing"
-	case menderStateRecoverInstall:
-		return "recover_install"
+	case menderStateRecoverInstallCommitting:
+		return "recover_install_committing"
+	case menderStateRecoverInstallClearApp:
+		return "recover_install_clear_app"
 	default:
 		return ""
 	}
@@ -146,8 +148,10 @@ func (s *menderState) UnmarshalJSON(data []byte) error {
 		*s = menderStateRebooting
 	case "committing":
 		*s = menderStateCommitting
-	case "recover_install":
-		*s = menderStateRecoverInstall
+	case "recover_install_committing":
+		*s = menderStateRecoverInstallCommitting
+	case "recover_install_clear_app":
+		*s = menderStateRecoverInstallClearApp
 	default:
 		return fmt.Errorf("%w: %q", errInvalidMenderState, text)
 	}

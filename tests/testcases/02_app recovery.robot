@@ -16,6 +16,8 @@ Reboot during application update shall recover and complete update
     Log To Console    ${response.text} ${response.status_code} 
     Should Be Equal As Integers    ${response.status_code}    202
 
+    Clear Error Injection
+
     ${status_response}=    Wait for Update    ${API_URL}/software/application/${APP_NAME}  timeout=120s
     Check Current Version  ${API_URL}/software/application/${APP_NAME} 
     ...   nginx-demo

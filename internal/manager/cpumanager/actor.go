@@ -54,7 +54,7 @@ func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 		}
 	}
 	m.saveState()
-	m.mender = newMenderManager(m.logger, &m.state.MenderState, m.emitMenderEvent, hasRebooted)
+	m.mender = newMenderManager(m.logger, &m.state.MenderState, m.emitMenderEvent, hasRebooted, m.saveState)
 	go m.loop()
 	return m, nil
 }
@@ -95,12 +95,12 @@ func (m *CPUManager) handleCommand(cmd Command) {
 
 // handleMenderEvent handles events emitted by the mender manager.
 func (m *CPUManager) handleMenderEvent(cmd MenderEvent) {
-	m.logger.Infof("Handling mender event: %d", cmd.event.Code)
+	m.logger.Infof("Handling mender event: %s", cmd.event.Code)
 
 	switch cmd.event.Code {
 	case menderEventNone:
 		m.logger.Debugf("Ignoring no-op mender event")
-	case menderEventInstallFinished, menderEventRebootFinished, menderEventCommitFinished, menderEventRestarted:
+	case menderEventInstallFinished, menderEventRebootFinished, menderEventCommitFinished, menderEventRestarted, menderEventRecoverFinished:
 		// pass low level events to mender manager
 		m.mender.HandleEvent(cmd.event)
 	case menderEventJobFinished:
@@ -196,7 +196,7 @@ func (m *CPUManager) rejectUpdateInProgress(entityName string, e *entity, reply 
 func (m *CPUManager) rejectAlreadyDeployed(entityName string, e *entity, deployingNV NameVersion, reply chan Result[struct{}]) bool {
 	deployed, err := e.isDeployed(deployingNV)
 	if err != nil {
-		m.logger.Errorf("Failed to check if artifact is already deployed for entity %s: %v. Continue", entityName, err)
+		m.logger.Warnf("Failed to check if artifact is already deployed for entity %s: %v. Continue", entityName, err)
 		return false
 	}
 	if !deployed {
@@ -221,7 +221,7 @@ func (m *CPUManager) handleGetEntityState(entityName string, reply chan Result[E
 	}
 	nv, err := e.getDeployedVersion()
 	if err != nil {
-		m.logger.Errorf("Failed to get deployed version for entity %s: %v. Assume not deployed", entityName, err)
+		m.logger.Warnf("Failed to get deployed version for entity %s: %v. Assume not deployed", entityName, err)
 		nv = NameVersion{}
 	}
 	// if err != nil && e.DeployStatus.Code == DeployStatusCodeSuccess {
