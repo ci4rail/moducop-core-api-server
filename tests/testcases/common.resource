@@ -12,6 +12,10 @@ ${ASSET_DIR}      ${EXECDIR}/assets
 ${STATE_DIR}      ${EXECDIR}/../mock-mender-state
 ${SUT_LOGFILE}    ${EXECDIR}/results/sut.log
 ${SIMULATION_MODE}  true
+${COREOS_IMAGE1}  ${ASSET_DIR}/Moducop-CPU01_Standard-Image_v2.7.0.40ee657.20260218.1208.mender
+${COREOS_IMAGE1-VERSION}  v2.7.0.40ee657.20260218.1208
+${COREOS_IMAGE2}  ${ASSET_DIR}/Moducop-CPU01_Standard-Image_dirty_v2.7.0.some_dummy_change.40ee657.klaus.20260313.1713.mender
+${COREOS_IMAGE2-VERSION}  v2.7.0.some_dummy_change.40ee657.klaus.20260313.1713
 
 *** Keywords ***
 

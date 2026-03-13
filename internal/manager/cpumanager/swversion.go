@@ -48,8 +48,10 @@ func coreOSVersionFromTargetFS() (string, string, error) {
 }
 
 func coreOsVersionFromIssueLine(line string) (string, string, error) {
-	// extract name and version from a string like "Moducop-CPU01_Standard-Image_v2.6.0.f457f6d.20260210.1540"
-	re := regexp.MustCompile(`^[A-Za-z0-9]+-(?P<name>.+)-Image_(?P<version>v\d+\.\d+\.\d+(?:\..+)?)$`)
+	// extract name and version from strings like:
+	// "Moducop-CPU01_Standard-Image_v2.6.0.f457f6d.20260210.1540"
+	// "Moducop-CPU01_Standard-Image_dirty_v2.7.0.some_dummy_change.40ee657.klaus.20260313.1713"
+	re := regexp.MustCompile(`^[A-Za-z0-9]+-(?P<name>.+)-Image(?:_dirty)?_(?P<version>v\d+\.\d+\.\d+(?:\..+)?)$`)
 	matches := re.FindStringSubmatch(line)
 	if matches == nil {
 		return "", "", fmt.Errorf("%w: %s", errInvalidIssueLineFormat, line)

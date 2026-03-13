@@ -232,7 +232,7 @@ func (m *menderManager) handleInstallingEvent(event menderEvent) {
 			menderUpdateResultInstallationFailedUpdateAlreadyInProgress,
 			menderUpdateResultInstallationFailedGeneric:
 			m.logger.Warnf("Received unexpected mender update result for successful install: %v", event.UpdateResult)
-			m.emitJobFinished(false, fmt.Sprintf("Unexpected mender update result: %s", menderUpdateResultText(event.UpdateResult)))
+			m.emitJobFinished(false, fmt.Sprintf("Unexpected mender update result: %s", event.UpdateResult))
 		}
 	}
 }
@@ -261,7 +261,7 @@ func (m *menderManager) handleCommittingEvent(event menderEvent) {
 		if event.Success {
 			m.emitJobFinished(true, "")
 		} else {
-			m.emitJobFinished(false, fmt.Sprintf("Mender commit failed: %s", menderUpdateResultText(event.UpdateResult)))
+			m.emitJobFinished(false, fmt.Sprintf("Mender commit failed: %s", event.UpdateResult))
 		}
 	case menderEventNone, menderEventInstallFinished, menderEventRebootFinished, menderEventJobFinished, menderEventRecoverFinished:
 		m.logger.Warnf("Received unexpected mender event code %s in committing state: %v", event.Code, event)
@@ -307,32 +307,6 @@ func (m *menderManager) handleRecoverInstallClearAppEvent(event menderEvent) {
 		m.clearAppDir()
 	case menderEventNone, menderEventRecoverFinished, menderEventCommitFinished, menderEventInstallFinished, menderEventRebootFinished, menderEventJobFinished:
 		m.logger.Warnf("Received unexpected mender event code %s in recover install clear app state: %v", event.Code, event)
-	}
-}
-
-// nolint: cyclop
-func menderUpdateResultText(result menderUpdateResult) string {
-	switch result {
-	case menderUpdateResultInstalledButNotCommited:
-		return "Installed, but not committed."
-	case menderUpdateResultInstalledAndCommited:
-		return "Installed and committed."
-	case menderUpdateResultCommited:
-		return "Committed."
-	case menderUpdateResultInstallationFailedSystemNotModified:
-		return "Installation failed. System not modified."
-	case menderUpdateResultInstallationFailedRolledBack:
-		return "Installation failed. Rolled back modifications."
-	case menderUpdateResultInstallationFailedUpdateAlreadyInProgress:
-		return "Update already in progress."
-	case menderUpdateResultInstallationFailedPleaseCommitOrRollback:
-		return "Please commit or roll back first"
-	case menderUpdateResultInstallationFailedSystemInconsistent:
-		return "System may be in an inconsistent state."
-	case menderUpdateResultInstallationFailedGeneric:
-		return "Installation failed. Generic error."
-	default:
-		return ""
 	}
 }
 
@@ -409,6 +383,7 @@ func (me *menderEvent) String() string {
 	return fmt.Sprintf("{Code: %d, Success: %v, UpdateResult: %s, Message: %s}", me.Code, me.Success, me.UpdateResult, me.Message)
 }
 
+// These texts are reported to called
 // nolint: cyclop
 func (r menderUpdateResult) String() string {
 	switch r {
@@ -433,6 +408,32 @@ func (r menderUpdateResult) String() string {
 	default:
 		return fmt.Sprintf("Unknown result: %d", r)
 	}
+}
+
+// These texts are checked in the mender-update outputs to map it to result codes
+// nolint: cyclop
+func menderUpdateResultText(result menderUpdateResult) string {
+	switch result {
+	case menderUpdateResultInstalledButNotCommited:
+		return "Installed, but not committed."
+	case menderUpdateResultInstalledAndCommited:
+		return "Installed and committed."
+	case menderUpdateResultCommited:
+		return "Committed."
+	case menderUpdateResultInstallationFailedSystemNotModified:
+		return "Installation failed. System not modified."
+	case menderUpdateResultInstallationFailedRolledBack:
+		return "Installation failed. Rolled back modifications."
+	case menderUpdateResultInstallationFailedUpdateAlreadyInProgress:
+		return "Update already in progress."
+	case menderUpdateResultInstallationFailedPleaseCommitOrRollback:
+		return "Please commit or roll back first"
+	case menderUpdateResultInstallationFailedSystemInconsistent:
+		return "System may be in an inconsistent state."
+	case menderUpdateResultInstallationFailedGeneric:
+		return ""
+	}
+	return ""
 }
 
 func (c menderEventCode) String() string {

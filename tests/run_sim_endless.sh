@@ -1,7 +1,7 @@
 existing_pids="$(lsof -t -iTCP:8090 -sTCP:LISTEN 2>/dev/null)"
 if [ -n "$existing_pids" ]; then
     echo "Stopping processes listening on port 8090: $existing_pids"
-    kill $existing_pids
+    kill -9 $existing_pids
 fi
 
 while true; do

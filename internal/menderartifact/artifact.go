@@ -31,6 +31,8 @@ var (
 	errTypeInfoNotFound           = errors.New("type-info not found")
 )
 
+var legacyRootfsImageVersionRe = regexp.MustCompile(`^(?P<name>.+)-image(?P<suffix>-dirty)?_(?P<version>v.+?)(?:-dev)?$`)
+
 // CoreOSVersionFromArtifact reads the artifact file at the given path and extracts the CoreOS version
 // from the artifact_provides field in the embedded header.tar(.gz) headers/0000/type-info file.
 // It looks for a "provides" info for "rootfs-image.version", it then extracts the name and version
@@ -166,6 +168,7 @@ func parseHeaderTar(r io.Reader) (HeadersTypeInfo, error) {
 			if uErr := json.Unmarshal(b, &info); uErr != nil {
 				return info, fmt.Errorf("parse headers/0000/type-info: %w", uErr)
 			}
+			normalizeArtifactProvides(info.ArtifactProvides)
 		}
 		hasTypeInfo = true
 	}
@@ -173,4 +176,27 @@ func parseHeaderTar(r io.Reader) (HeadersTypeInfo, error) {
 		return info, fmt.Errorf("%w", errTypeInfoNotFound)
 	}
 	return info, nil
+}
+
+func normalizeArtifactProvides(provides map[string]any) {
+	if provides == nil {
+		return
+	}
+
+	rawVersion, ok := provides["rootfs-image.version"]
+	if !ok {
+		return
+	}
+
+	version, ok := rawVersion.(string)
+	if !ok {
+		return
+	}
+
+	matches := legacyRootfsImageVersionRe.FindStringSubmatch(version)
+	if matches == nil {
+		return
+	}
+
+	provides["rootfs-image.version"] = matches[1] + matches[2] + "-" + matches[3]
 }

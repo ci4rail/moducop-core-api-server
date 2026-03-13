@@ -7,8 +7,7 @@ ${APP_NAME}  nginx-demo
 
 *** Test Cases ***
 Simultaneous CoreOS and App Update Shall Pass
-    ${response}=    Load Artifact  ${API_URL}/software/core-os  
-    ...    ${ASSET_DIR}/Moducop-CPU01_Standard-Image_v2.6.0.f457f6d.20260210.1540.mender
+    ${response}=    Load Artifact  ${API_URL}/software/core-os  ${COREOS_IMAGE1}
     Log To Console    ${response.text} ${response.status_code} 
     Should Be Equal As Integers    ${response.status_code}    202
 
@@ -24,6 +23,6 @@ Simultaneous CoreOS and App Update Shall Pass
 
     Check Current Version   ${API_URL}/software/core-os   
     ...    cpu01-standard
-    ...    v2.6.0.f457f6d.20260210.1540
+    ...    ${COREOS_IMAGE1-VERSION}
 
 

@@ -20,10 +20,17 @@ func TestCoreOsVersionFromIssueLine(t *testing.T) {
 			wantErr:     false,
 		},
 		{
-			name:        "valid line without underscores",
+			name:        "valid line without underscores2",
 			line:        "Moducop-CPU01-Standard-Image_v2.6.0.f457f6d.20260210.1540",
 			wantName:    "cpu01-standard",
 			wantVersion: "v2.6.0.f457f6d.20260210.1540",
+			wantErr:     false,
+		},
+		{
+			name:        "valid line without underscores3",
+			line:        "Moducop-CPU01_Standard-Image_dirty_v2.7.0.some_dummy_change.40ee657.klaus.20260313.1713",
+			wantName:    "cpu01-standard",
+			wantVersion: "v2.7.0.some_dummy_change.40ee657.klaus.20260313.1713",
 			wantErr:     false,
 		},
 		{

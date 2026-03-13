@@ -19,7 +19,7 @@ const (
 	stageBootedTrial = "booted-trial"
 )
 
-const defaultIssueContent = "TDX Wayland with XWayland 7.1.0-devel-20260210154127+build.0 (scarthgap) \\n \\l\nModucop-CPU01_Standard-Image_v2.6.0.f457f6d.20260210.1540\n"
+const defaultIssueContent = "TDX Wayland with XWayland 7.1.0-devel-20260210154127+build.0 (scarthgap) \\n \\l\nModucop-CPU01_Standard-Image_v2.7.0.40ee657.20260218.1208\n"
 
 type State struct {
 	ActiveRootfs       string           `json:"active_rootfs"`

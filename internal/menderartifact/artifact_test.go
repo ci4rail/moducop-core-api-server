@@ -24,6 +24,15 @@ func TestParseArtifactHeadersTypeInfo(t *testing.T) {
 			providesValue: "cpu01-standard-v2.6.0.f457f6d.20260210.1540",
 		},
 		{
+			name: "CPU01 Rootfs Artifact2",
+			artifactPath: filepath.Join(
+				"..", "..", "tests", "assets",
+				"Moducop-CPU01_Standard-Image_dirty_v2.7.0.some_dummy_change.40ee657.klaus.20260313.1713.mender",
+			),
+			providesField: "rootfs-image.version",
+			providesValue: "cpu01-standard-dirty-v2.7.0.some_dummy_change.40ee657.klaus.20260313.1713",
+		},
+		{
 			name: "Nginx Demo App Artifact",
 			artifactPath: filepath.Join(
 				"..", "..", "tests", "assets",

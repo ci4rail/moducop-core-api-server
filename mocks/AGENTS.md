@@ -216,7 +216,7 @@ The preparefs command should prepare the filesystem for the mock. It should crea
 - Create /etc/issue with the following content:
 ```
 TDX Wayland with XWayland 7.1.0-devel-20260210154127+build.0 (scarthgap) \n \l
-Moducop-CPU01_Standard-Image_v2.6.0.f457f6d.20260210.1540
+Moducop-CPU01_Standard-Image_v2.7.0.40ee657.20260218.1208
 ```
 
 - Create /proc/sys/kernel/random/boot_id with a random UUID. 
