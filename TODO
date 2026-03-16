@@ -1,7 +1,7 @@
 CPUManager
 [x] detect reboot
 [x] handle crash/restart of api-server
-[ ] mender inconsistent state handling
+[x] mender inconsistent state handling
 [x] endpoint PUT software/core-os
 [x] endpoint GET software/core-os
 [x] endpoint GET software/application

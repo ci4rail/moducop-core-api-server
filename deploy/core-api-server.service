@@ -1,0 +1,11 @@
+[Unit]
+Description=Moducop Core API Server
+
+[Service]
+Type=simple
+ExecStart=/root/core-api-server --server.address 0.0.0.0:8090 --log.level debug
+
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target
