@@ -5,6 +5,7 @@ Library      RequestsLibrary
 Library  Process
 Library  SSHLibrary
 Resource  ../robot-helpers/sshlib/utils.resource
+Variables  ../duts.yaml
 
 *** Variables ***
 ${DUT_IP}       \
@@ -21,17 +22,18 @@ ${COREOS_IMAGE2-VERSION}  v2.7.0.some_dummy_change.40ee657.klaus.20260313.1713
 *** Keywords ***
 
 Start SUT
-    IF  '$SIMULATION_MODE == true'    
+    IF  '${SIMULATION_MODE}' == 'true'   
         Start Process  ./run_sim_endless.sh  shell=True  stdout=${SUT_LOGFILE}  stderr=${SUT_LOGFILE}
     END
-
+    
 Crash and Restart SUT
-    IF  '$SIMULATION_MODE == true'    
+    IF  '${SIMULATION_MODE}' == 'true'  
         Sleep  1.5s
         Terminate All Processes
         Start SUT
         Sleep  3s
     ELSE
+        Set To Dictionary    ${duts.DUT1}  IP_ADDRESS=${DUT_IP}
         Log To Console    Rebooting DUT
         SSH Command Should Succeed    reboot
         Sleep  30s

@@ -166,9 +166,11 @@ func menderUpdateResultIsSuccess(result menderUpdateResult) bool {
 }
 
 func (m *menderManager) menderUpdateResultFromInstallOutput(stdout string, err error) menderUpdateResult {
+	m.logger.Debugf("Parsing mender install output. stdout: %s, err: %v", stdout, err)
 	for result := menderUpdateResultInstalledButNotCommited; result < menderUpdateResultInstallationFailedGeneric; result++ {
 		text := menderUpdateResultText(result)
 		if text != "" && strings.Contains(stdout, text) {
+			m.logger.Debugf("Matched mender install output to result %s", result)
 			return result
 		}
 	}

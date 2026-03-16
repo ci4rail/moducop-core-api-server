@@ -8,7 +8,7 @@ Resource  ../robot-helpers/sshlib/utils.resource
 Suite Setup  Prepare Environment
 Suite Teardown  Clear Environment
 
-Variables  ../duts.yaml
+
 
 *** Variables ***
 
@@ -39,6 +39,6 @@ Prepare Environment
     END
 
 Clear Environment
-    IF  '$SIMULATION_MODE == true'
+    IF  '${SIMULATION_MODE}' == 'true'
         Terminate All Processes
     END

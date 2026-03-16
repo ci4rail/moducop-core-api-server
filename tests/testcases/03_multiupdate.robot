@@ -16,7 +16,7 @@ Simultaneous CoreOS and App Update Shall Pass
     Log To Console    ${response.text} ${response.status_code} 
     Should Be Equal As Integers    ${response.status_code}    202
 
-    Wait for Update    ${API_URL}/software/application/${APP_NAME}  timeout=60s
+    Wait for Update    ${API_URL}/software/application/${APP_NAME}  timeout=600s
     Check Current Version  ${API_URL}/software/application/${APP_NAME} 
     ...   nginx-demo
     ...   a895c3c
