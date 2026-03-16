@@ -243,8 +243,13 @@ func (m *menderManager) handleRebootingEvent(event menderEvent) {
 		m.logger.Infof("System reboot detected. Retrying reboot to complete installation.")
 		m.runRebootInBackGround(rebootTimeout)
 	case menderEventRebootFinished:
-		m.state.State = menderStateCommitting
-		m.runMenderCommitInBackGround(commitTimeout)
+		if event.Success {
+			m.state.State = menderStateCommitting
+			m.runMenderCommitInBackGround(commitTimeout)
+		} else {
+			m.logger.Warnf("Reboot failed during installation. Starting recovery install.")
+			m.emitJobFinished(false, "Could not reboot")
+		}
 	case menderEventNone, menderEventInstallFinished, menderEventCommitFinished, menderEventJobFinished, menderEventRecoverFinished:
 		m.logger.Warnf("Received unexpected mender event code %s in rebooting state: %v", event.Code, event)
 	}

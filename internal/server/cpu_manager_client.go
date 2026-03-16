@@ -150,6 +150,8 @@ func statusFromCPUManagerCode(code string) int {
 		return http.StatusConflict
 	case cpumanager.ErrCodeArtifactInvalid:
 		return http.StatusBadRequest
+	case cpumanager.ErrCodeEntityNotFound:
+		return http.StatusNotFound
 	case cpumanager.ErrCodeInvalidCoreOSEntityName:
 		return http.StatusBadRequest
 	case cpumanager.ErrCodeEntityUpdateInProgress, cpumanager.ErrCodeMenderBusy:

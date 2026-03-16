@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/ci4rail/moducop-core-api-server/internal/io4edgeartifact"
@@ -166,6 +167,9 @@ func (m *Io4edgeManager) handleListDeviceNames(reply chan Result[[]string]) {
 	for name := range m.state.Devices {
 		devs = append(devs, name)
 	}
+	// sort device names for consistent order
+	sort.Strings(devs)
+
 	reply <- Result[[]string]{Value: devs}
 }
 

@@ -14,6 +14,7 @@ const (
 	ErrCodeArtifactInvalid         = "cpm-0006"
 	ErrCodeGetVersionFailed        = "cpm-0007"
 	ErrCodeListApplicationsFailed  = "cpm-0008"
+	ErrCodeEntityNotFound          = "cpm-0009"
 )
 
 type CodedError interface {

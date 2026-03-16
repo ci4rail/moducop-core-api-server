@@ -214,8 +214,8 @@ func (m *CPUManager) handleGetEntityState(entityName string, reply chan Result[E
 	e, ok := m.state.Entities[entityName]
 	if !ok {
 		reply <- Result[EntityStatus]{Err: NewCodedError(
-			ErrCodeInvalidCoreOSEntityName,
-			fmt.Sprintf("invalid entity name for CoreOS: %s", entityName),
+			ErrCodeEntityNotFound,
+			fmt.Sprintf("no such entity: %s", entityName),
 		)}
 		return
 	}
