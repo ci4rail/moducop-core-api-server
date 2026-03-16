@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strings"
 )
 
 type HeadersTypeInfo struct {
@@ -65,6 +66,8 @@ func coreOsVersionFromRootfsImageVersion(providesStr string) (string, string, er
 		return "", "", fmt.Errorf("%w: %v", errUnexpectedRootfsMatches, matches)
 	}
 	name := matches[1]
+	name = strings.TrimSuffix(name, "-dirty")
+
 	version := matches[2]
 	return name, version, nil
 }
