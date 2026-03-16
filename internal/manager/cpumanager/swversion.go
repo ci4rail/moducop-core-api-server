@@ -67,12 +67,12 @@ func coreOsVersionFromIssueLine(line string) (string, string, error) {
 }
 
 // appVersionFromTargetFS reads the version of the given application from the target filesystem.
-// It expects a file at /data/mender-app/<appName>/manifest/.env file containing the version string as
+// It expects a file at /data/mender-app/<appName>/manifests/.env file containing the version string as
 // a shell variable like "SOFTWARE_VERSION=<version>".
 // Returns version, error
 func appVersionFromTargetFS(appName string) (string, error) {
-	// read version from /data/mender-app/<appName>/manifest/.env
-	envFile := fmt.Sprintf("%s/%s/manifest/.env", menderAppRootDir, appName)
+	// read version from /data/mender-app/<appName>/manifests/.env
+	envFile := fmt.Sprintf("%s/%s/manifests/.env", menderAppRootDir, appName)
 	data, err := os.ReadFile(prefixfs.Path(envFile))
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", envFile, err)

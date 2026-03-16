@@ -4,6 +4,7 @@ Library   OperatingSystem
 Library      RequestsLibrary
 Library  Process
 Library  SSHLibrary
+Resource  ../robot-helpers/sshlib/utils.resource
 
 *** Variables ***
 ${DUT_IP}       \
@@ -30,6 +31,11 @@ Crash and Restart SUT
         Terminate All Processes
         Start SUT
         Sleep  3s
+    ELSE
+        Log To Console    Rebooting DUT
+        SSH Command Should Succeed    reboot
+        Sleep  30s
+        Open SSH Connection to DUT
     END
 
 Load Artifact

@@ -1,0 +1,6 @@
+DUTS:
+    DUT1:
+        SHELL_PROMPT: '# '
+        UBOOT_PROMPT: '# '
+        USER: root
+        PASSWORD: "cheesebread"

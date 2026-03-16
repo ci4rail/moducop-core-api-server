@@ -12,13 +12,13 @@ All mock commands should be implemented as Go CLI commands.
 
 The moducop-core-api-server will run in a chroot environment, the mock shall simulate the following folders:
 - /etc/issue - mirror the /etc/issue file of the current rootfs
-- /data/mender-app/{application-name]/manifest - contains the manifest folder of mender artifacts for application updates. Contains docker-compose.yaml
+- /data/mender-app/{application-name]/manifests - contains the manifest folder of mender artifacts for application updates. Contains docker-compose.yaml
 
 ## Mocks interaction
 
 The mock commands and the provided filesystem shall interact with each other to simulate the behavior of the actual system. For example, when mender-update install is called, it should write the new rootfs to a temporary directory and update the /etc/issue file to reflect the new rootfs. When reboot is called, it should switch the pointer to the current rootfs to the new rootfs if it was installed but not committed, or switch back to the old rootfs if reboot is called with an installed but not committed update.
 
-Also the "mender-update install" command, when called with an application update artifact, should write the docker-compose.yaml to /data/mender-app/{application-name]/manifest/docker-compose.yaml, and the mocked docker command should show running containers based on the docker-compose.yaml file in that directory.
+Also the "mender-update install" command, when called with an application update artifact, should write the docker-compose.yaml to /data/mender-app/{application-name]/manifests/docker-compose.yaml, and the mocked docker command should show running containers based on the docker-compose.yaml file in that directory.
 
 ## mender-update command
 
@@ -158,7 +158,7 @@ manifests/docker-compose.yaml
 manifests/.env
 
 
-The mock shall extract the content of manifests.tar to /data/mender-app/{application-name}/manifest. images.tar.gz can be ignored for the mock.
+The mock shall extract the content of manifests.tar to /data/mender-app/{application-name}/manifests. images.tar.gz can be ignored for the mock.
 
 The mocked docker command should show running containers based on the docker-compose.yaml file in that directory. It shall reflect docker labels
 

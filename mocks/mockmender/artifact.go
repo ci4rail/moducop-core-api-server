@@ -512,12 +512,12 @@ func extractIssueWithDebugfs(ext4ImagePath, issuePath string) error {
 }
 
 func ComposeContainersFromManifest(projectDir, project string) ([]ContainerState, error) {
-	composePath := filepath.Join(projectDir, "manifest", "docker-compose.yaml")
+	composePath := filepath.Join(projectDir, "manifests", "docker-compose.yaml")
 	b, err := os.ReadFile(composePath)
 	if err != nil {
 		return nil, err
 	}
-	env, err := loadDotEnv(filepath.Join(projectDir, "manifest", ".env"))
+	env, err := loadDotEnv(filepath.Join(projectDir, "manifests", ".env"))
 	if err != nil {
 		return nil, err
 	}

@@ -21,6 +21,7 @@ sshpass -p $pass ssh $ssh_opts root@$dut_ip \
     "echo "RESET" | factory-reset"
 
 sleep 40
+sshpass -p $pass ssh $ssh_opts root@$dut_ip "mender-update commit"
 sshpass -p $pass ssh $ssh_opts root@$dut_ip "rm -f /root/core-api-server; systemctl stop core-api-server.service"
 GOOS=linux GOARCH=arm64 go build -o ../bin/core-api-server-arm64 ../cmd/api-server/main.go 
 sshpass -p $pass scp $scp_opts ../bin/core-api-server-arm64  root@$dut_ip:/root/core-api-server

@@ -115,7 +115,7 @@ func (m *menderManager) StartUpdateJob(entityType entityType, artifact string, e
 func (m *menderManager) runMenderInstallInBackGround(artifact string, timeout time.Duration) {
 	m.saveState()
 	go func() {
-		stdout, stderr, _, err := execcli.RunCommand("mender-update", timeout, "install", artifact)
+		stdout, stderr, _, err := execcli.RunCommandWithLogger("mender-update", timeout, m.logger, "install", artifact)
 		result := m.menderUpdateResultFromInstallOutput(stdout, err)
 
 		me := menderEvent{
@@ -133,7 +133,7 @@ func (m *menderManager) runMenderInstallInBackGround(artifact string, timeout ti
 func (m *menderManager) runMenderCommitInBackGround(timeout time.Duration) {
 	m.saveState()
 	go func() {
-		stdout, stderr, _, err := execcli.RunCommand("mender-update", timeout, "commit")
+		stdout, stderr, _, err := execcli.RunCommandWithLogger("mender-update", timeout, m.logger, "commit")
 		result := m.menderUpdateResultFromInstallOutput(stdout, err)
 
 		me := menderEvent{
@@ -151,7 +151,7 @@ func (m *menderManager) runRebootInBackGround(timeout time.Duration) {
 	m.saveState()
 	go func() {
 		time.Sleep(rebootDelay)
-		stdout, stderr, _, err := execcli.RunCommand("reboot", timeout)
+		stdout, stderr, _, err := execcli.RunCommandWithLogger("reboot", timeout, m.logger)
 		if err != nil {
 			message := fmt.Sprintf("Reboot command failed: stdout: %s, stderr: %s, err: %v", stdout, stderr, err)
 			m.emitRebootFinished(message, err)

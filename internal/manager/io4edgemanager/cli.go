@@ -33,7 +33,7 @@ func (m *Io4edgeManager) startUpdate(deviceName string) {
 }
 
 func (m *Io4edgeManager) runIo4edgeCLI(timeout time.Duration, args ...string) (string, string, error) {
-	stdout, stderr, _, err := execcli.RunCommand("io4edge-cli", timeout, args...)
+	stdout, stderr, _, err := execcli.RunCommandWithLogger("io4edge-cli", timeout, m.logger, args...)
 	return stdout, stderr, err
 }
 

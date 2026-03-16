@@ -251,7 +251,7 @@ func AppPath(project string) string {
 }
 
 func AppManifestPath(project string) string {
-	return filepath.Join(AppPath(project), "manifest")
+	return filepath.Join(AppPath(project), "manifests")
 }
 
 func EnsureMockFilesystem() error {

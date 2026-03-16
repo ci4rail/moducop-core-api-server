@@ -1,10 +1,14 @@
 *** Settings ***
 Library  OperatingSystem
 Library  Process
+Library  Collections
 Resource  common.resource
+Resource  ../robot-helpers/sshlib/utils.resource
 
 Suite Setup  Prepare Environment
 Suite Teardown  Clear Environment
+
+Variables  ../duts.yaml
 
 *** Variables ***
 
@@ -16,6 +20,11 @@ Prepare Environment
         Log To Console    Running in non-simulation mode, using DUT IP ${DUT_IP}
         Set Global Variable  ${API_URL}  http://${DUT_IP}:8090/api/v1
         Set Global Variable  ${SIMULATION_MODE}  false
+
+        Set To Dictionary    ${duts.DUT1}  IP_ADDRESS=${DUT_IP}
+        Log To Console    DUTS: ${DUTS}
+        Open SSH Connection to DUT
+
     ELSE    
         Log To Console    Running in simulation mode
         ${path}=    Get Environment Variable    PATH
