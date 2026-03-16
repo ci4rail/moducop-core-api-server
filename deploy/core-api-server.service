@@ -1,5 +1,6 @@
 [Unit]
 Description=Moducop Core API Server
+After=docker.service
 
 [Service]
 Type=simple

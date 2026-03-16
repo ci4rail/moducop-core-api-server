@@ -13,7 +13,7 @@ CPUManager
 [x] endpoint POST system/reboot
 
 [x] io4edge Manager
-
+[ ] when to scan for io4edge devices
 Mocks
 [x] preparefs
 [x] simulate /proc/sys/kernel/random/boot_id

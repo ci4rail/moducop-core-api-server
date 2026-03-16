@@ -116,7 +116,7 @@ func (m *menderManager) runMenderInstallInBackGround(artifact string, timeout ti
 	m.saveState()
 	go func() {
 		stdout, stderr, _, err := execcli.RunCommandWithLogger("mender-update", timeout, m.logger, "install", artifact)
-		result := m.menderUpdateResultFromInstallOutput(stdout, err)
+		result := m.menderUpdateResultFromInstallOutput(stdout+" "+stderr, err)
 
 		me := menderEvent{
 			Code:         menderEventInstallFinished,
@@ -134,7 +134,7 @@ func (m *menderManager) runMenderCommitInBackGround(timeout time.Duration) {
 	m.saveState()
 	go func() {
 		stdout, stderr, _, err := execcli.RunCommandWithLogger("mender-update", timeout, m.logger, "commit")
-		result := m.menderUpdateResultFromInstallOutput(stdout, err)
+		result := m.menderUpdateResultFromInstallOutput(stdout+" "+stderr, err)
 
 		me := menderEvent{
 			Code:         menderEventCommitFinished,
@@ -167,7 +167,17 @@ func menderUpdateResultIsSuccess(result menderUpdateResult) bool {
 
 func (m *menderManager) menderUpdateResultFromInstallOutput(stdout string, err error) menderUpdateResult {
 	m.logger.Debugf("Parsing mender install output. stdout: %s, err: %v", stdout, err)
-	for result := menderUpdateResultInstalledButNotCommited; result < menderUpdateResultInstallationFailedGeneric; result++ {
+	matchOrder := []menderUpdateResult{
+		menderUpdateResultInstallationFailedUpdateAlreadyInProgress,
+		menderUpdateResultInstalledButNotCommited,
+		menderUpdateResultInstallationFailedPleaseCommitOrRollback,
+		menderUpdateResultInstallationFailedSystemInconsistent,
+		menderUpdateResultInstallationFailedSystemNotModified,
+		menderUpdateResultInstallationFailedRolledBack,
+		menderUpdateResultInstalledAndCommited,
+		menderUpdateResultCommited,
+	}
+	for _, result := range matchOrder {
 		text := menderUpdateResultText(result)
 		if text != "" && strings.Contains(stdout, text) {
 			m.logger.Debugf("Matched mender install output to result %s", result)
@@ -226,14 +236,15 @@ func (m *menderManager) handleInstallingEvent(event menderEvent) {
 		case menderUpdateResultInstalledAndCommited, menderUpdateResultCommited:
 			m.emitJobFinished(true, "")
 
-		case menderUpdateResultInstallationFailedSystemInconsistent, menderUpdateResultInstallationFailedPleaseCommitOrRollback:
+		case menderUpdateResultInstallationFailedSystemInconsistent,
+			menderUpdateResultInstallationFailedPleaseCommitOrRollback,
+			menderUpdateResultInstallationFailedUpdateAlreadyInProgress:
 			m.logger.Warnf("Mender reported inconsistent system or pending commit/rollback after installation. Starting recovery install.")
 			m.startRecoverInstall()
 		case menderUpdateResultInstallationFailedSystemNotModified,
 			menderUpdateResultInstallationFailedRolledBack,
-			menderUpdateResultInstallationFailedUpdateAlreadyInProgress,
 			menderUpdateResultInstallationFailedGeneric:
-			m.logger.Warnf("Received unexpected mender update result for successful install: %v", event.UpdateResult)
+			m.logger.Warnf("Received unexpected mender update result for install: %v", event.UpdateResult)
 			m.emitJobFinished(false, fmt.Sprintf("Unexpected mender update result: %s", event.UpdateResult))
 		}
 	}

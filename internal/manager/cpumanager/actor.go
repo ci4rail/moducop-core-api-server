@@ -313,6 +313,7 @@ func (m *CPUManager) setInitialPersistentState() {
 }
 
 func (m *CPUManager) saveState() {
+	m.logger.Debugf("save state: %+v", m.state)
 	err := m.store.Save(context.Background(), m.state)
 	if err != nil {
 		m.logger.Errorf("Failed to save state: %v", err)
