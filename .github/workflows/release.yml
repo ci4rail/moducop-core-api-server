@@ -2,6 +2,8 @@ name: Release Workflow
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 on:
   push:
