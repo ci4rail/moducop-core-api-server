@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 )
+
+const maxExtractedTarFileSize = 1024 * 1024 * 1024
 
 type HeaderInfo struct {
 	Payloads []struct {
@@ -324,7 +327,7 @@ func extractTarGzBytes(data []byte, outDir string) error {
 			if err != nil {
 				return err
 			}
-			if _, err := io.Copy(f, tr); err != nil {
+			if err := copyTarEntryWithLimit(f, tr, h.Name); err != nil {
 				_ = f.Close()
 				return err
 			}
@@ -437,7 +440,7 @@ func extractManifestTar(manifestsTar []byte, appManifestDir string) error {
 			if err != nil {
 				return err
 			}
-			if _, err := io.Copy(f, tr); err != nil {
+			if err := copyTarEntryWithLimit(f, tr, h.Name); err != nil {
 				_ = f.Close()
 				return err
 			}
@@ -446,6 +449,17 @@ func extractManifestTar(manifestsTar []byte, appManifestDir string) error {
 			}
 		}
 	}
+}
+
+func copyTarEntryWithLimit(dst io.Writer, src io.Reader, name string) error {
+	written, err := io.CopyN(dst, src, maxExtractedTarFileSize+1)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	if written > maxExtractedTarFileSize {
+		return fmt.Errorf("tar entry too large: %s", name)
+	}
+	return nil
 }
 
 func PrepareRootfsInspection(rootfsDir string) (ext4ImagePath, issuePath string, err error) {
