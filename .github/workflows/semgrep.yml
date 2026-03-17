@@ -13,27 +13,32 @@ on:
   # schedule:
   #   - cron: '30 0 1,15 * *' # scheduled for 00:30 UTC on both the 1st and 15th of the month
 
+permissions:
+  contents: read
+
 jobs:
   semgrep:
     name: Scan
     runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.147.0
     # Skip any PR created by dependabot to avoid permission issues
     if: (github.actor != 'dependabot[bot]')
     steps:
       # Fetch project source
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6.0.2
 
-      - uses: returntocorp/semgrep-action@v1
-        with:
-          config: >- # more at semgrep.dev/explore
-            p/security-audit
-            p/secrets
-            p/ci
-            p/r2c
-            p/r2c-ci
-            p/docker
-            p/dockerfile
-            p/command-injection
+      - name: Run Semgrep
+        run: |
+          semgrep scan \
+            --config p/security-audit \
+            --config p/secrets \
+            --config p/ci \
+            --config p/r2c \
+            --config p/r2c-ci \
+            --config p/docker \
+            --config p/dockerfile \
+            --config p/command-injection
 
         # == Optional settings in the `with:` block
 

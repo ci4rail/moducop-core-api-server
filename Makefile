@@ -2,7 +2,7 @@ SHELL=/bin/bash -e -o pipefail
 PWD = $(shell pwd)
 
 # constants
-GOLANGCI_VERSION = 2.7.2
+GOLANGCI_VERSION = 2.11.3
 DOCKER_REPO = ghcr.io/ci4rail/go-template
 DOCKER_TAG = latest
 PLATFORMS = linux/amd64,linux/arm64,linux/arm/v7
@@ -52,7 +52,10 @@ lint-reports: out/lint.xml
 out/lint.xml: $(GOLANGCI_LINT) out download
 	@$(GOLANGCI_LINT) run ./... --out-format checkstyle | tee "$(@)"
 
-test: ## Runs all tests
+
+test: unit-test ## Backward-compatible alias for CI and local usage
+
+unit-test: ## Runs all tests
 	@go test $(ARGS) ./...
 
 coverage: out/report.json ## Displays coverage per func on cli

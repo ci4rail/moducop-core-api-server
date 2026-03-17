@@ -8,6 +8,8 @@ import (
 	"github.com/ci4rail/moducop-core-api-server/internal/loglite"
 )
 
+var errTestCommandFailed = errors.New("command failed")
+
 func TestMenderUpdateResultFromInstallOutput(t *testing.T) {
 	var logBuf bytes.Buffer
 	manager := &menderManager{
@@ -63,7 +65,7 @@ func TestMenderUpdateResultFromInstallOutput(t *testing.T) {
 		{
 			name:   "generic fallback on unknown output",
 			stdout: "some unexpected output\n",
-			err:    errors.New("command failed"),
+			err:    errTestCommandFailed,
 			want:   menderUpdateResultInstallationFailedGeneric,
 		},
 	}

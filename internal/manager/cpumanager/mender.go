@@ -224,30 +224,38 @@ func (m *menderManager) handleInstallingEvent(event menderEvent) {
 		m.logger.Infof("Recovery install finished while installing. Restarting install")
 		m.runMenderInstallInBackGround(m.state.CurrentArtifact, updateTimeout)
 	case menderEventInstallFinished:
-		switch event.UpdateResult {
-		case menderUpdateResultInstalledButNotCommited:
-			if m.state.CurrentEntityType == entityTypeCoreOs {
-				m.state.State = menderStateRebooting
-				m.runRebootInBackGround(rebootTimeout)
-			} else {
-				m.state.State = menderStateCommitting
-				m.runMenderCommitInBackGround(commitTimeout)
-			}
-		case menderUpdateResultInstalledAndCommited, menderUpdateResultCommited:
-			m.emitJobFinished(true, "")
-		case menderUpdateResultInstallationFailedSystemInconsistent:
-			m.maybeClearAppDir()
-		case menderUpdateResultInstallationFailedPleaseCommitOrRollback,
-			menderUpdateResultInstallationFailedUpdateAlreadyInProgress:
-			m.logger.Warnf("Mender reported inconsistent system or pending commit/rollback after installation. Starting recovery install.")
-			m.startRecoverInstall()
-		case menderUpdateResultInstallationFailedSystemNotModified,
-			menderUpdateResultInstallationFailedRolledBack,
-			menderUpdateResultInstallationFailedGeneric:
-			m.logger.Warnf("Received unexpected mender update result for install: %v", event.UpdateResult)
-			m.emitJobFinished(false, fmt.Sprintf("Unexpected mender update result: %s", event.UpdateResult))
-		}
+		m.handleInstallFinished(event.UpdateResult)
 	}
+}
+
+func (m *menderManager) handleInstallFinished(result menderUpdateResult) {
+	switch result {
+	case menderUpdateResultInstalledButNotCommited:
+		m.startPostInstallStep()
+	case menderUpdateResultInstalledAndCommited, menderUpdateResultCommited:
+		m.emitJobFinished(true, "")
+	case menderUpdateResultInstallationFailedSystemInconsistent:
+		m.maybeClearAppDir()
+	case menderUpdateResultInstallationFailedPleaseCommitOrRollback,
+		menderUpdateResultInstallationFailedUpdateAlreadyInProgress:
+		m.logger.Warnf("Mender reported inconsistent system or pending commit/rollback after installation. Starting recovery install.")
+		m.startRecoverInstall()
+	case menderUpdateResultInstallationFailedSystemNotModified,
+		menderUpdateResultInstallationFailedRolledBack,
+		menderUpdateResultInstallationFailedGeneric:
+		m.logger.Warnf("Received unexpected mender update result for install: %v", result)
+		m.emitJobFinished(false, fmt.Sprintf("Unexpected mender update result: %s", result))
+	}
+}
+
+func (m *menderManager) startPostInstallStep() {
+	if m.state.CurrentEntityType == entityTypeCoreOs {
+		m.state.State = menderStateRebooting
+		m.runRebootInBackGround(rebootTimeout)
+		return
+	}
+	m.state.State = menderStateCommitting
+	m.runMenderCommitInBackGround(commitTimeout)
 }
 
 func (m *menderManager) handleRebootingEvent(event menderEvent) {
