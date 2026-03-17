@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/ci4rail/moducop-core-api-server/internal/io4edgeartifact"
@@ -133,6 +134,7 @@ func (m *Io4edgeManager) handleUpdate(
 		reply <- Result[struct{}]{Err: NewCodedError(ErrCodeArtifactInvalid, fmt.Sprintf("Failed to read firmware package: %v", err))}
 		return
 	}
+	manifest.Name = tweakNameFromManifest(manifest.Name)
 	if manifest.Name == dev.CurrentNV.Name && manifest.Version == dev.CurrentNV.Version {
 		reply <- Result[struct{}]{Err: NewCodedError(ErrCodeAlreadyDeployed, "Device "+deviceName+" already has firmware version "+manifest.Version)}
 		return
@@ -178,4 +180,13 @@ func (m *Io4edgeManager) saveState() {
 	if err != nil {
 		m.logger.Errorf("Failed to save state: %v", err)
 	}
+}
+
+// In most manifest files, the name is missing the leading "fw-" part, but firmware reports
+// the full name with "fw-" prefix. So we add it here if missing to be able to compare versions.
+func tweakNameFromManifest(name string) string {
+	if !strings.HasPrefix(name, "fw-") {
+		return "fw-" + name
+	}
+	return name
 }

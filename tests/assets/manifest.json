@@ -1,0 +1,11 @@
+{
+  "name": "cpu01uc-default",
+  "version": "1.1.1-rc.1",
+  "file": "fw-cpu01uc-default-1.1.1-rc.1.bin",
+  "compatibility": {
+    "hw": "s101-cpu01uc",
+    "major_revs": [
+      1
+    ]
+  }
+}

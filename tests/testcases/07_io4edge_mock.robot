@@ -1,6 +1,6 @@
 *** Settings ***
 Resource     common.resource
-Test Tags    io4edge
+Test Tags    io4edge-mock
 
 *** Variables ***
 ${DEV_BASE_NAME}  S100-IUO16-USB-EXT1-UC
@@ -12,6 +12,7 @@ List Io4Edge Devices Shall Return All Devices
     ${response}=    GET   ${API_URL}/hardware/io4edge-devices  expected_status=any
     Should Be Equal As Integers    ${response.status_code}    200
     Log To Console   ${response.json()} ${response.status_code}
+
     @{expected_devices}=    Create List
     ...    S100-IUO16-USB-EXT1-UC1
     ...    S100-IUO16-USB-EXT1-UC2
