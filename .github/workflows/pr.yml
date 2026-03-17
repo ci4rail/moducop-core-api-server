@@ -14,38 +14,11 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6.0.2
-        with:
-          lfs: true
-
-      - name: Install Go
-        uses: actions/setup-go@v6.2.0
+      - name: Verify Go code
+        uses: ./.github/actions/go-verify
         with:
           go-version: ${{ matrix.go-version }}
-
-      - name: Set up Go environment
-        run: |
-          mkdir -p ~/go/bin
-          echo "~/go/bin" >> $GITHUB_PATH
-
-      - uses: actions/cache@v5.0.3
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Download dependencies
-        run: make download
-
-      - name: Lint all code with golangci-lint
-        run: make lint
-
-      - name: Run all tests
-        run: make test
+          lfs: "true"
 
   build-and-push-pr-image:
     runs-on: ubuntu-latest

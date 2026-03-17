@@ -2,7 +2,7 @@
 
 # usage: target_factory <ip> <default-image-name>
 
-set -euo pipefail
+#set -euo pipefail
 
 if [ "$#" -ne 2 ]; then
     echo "Usage: $0 <ip> <default-image-path>"
