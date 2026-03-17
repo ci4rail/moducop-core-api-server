@@ -235,9 +235,9 @@ func (m *menderManager) handleInstallingEvent(event menderEvent) {
 			}
 		case menderUpdateResultInstalledAndCommited, menderUpdateResultCommited:
 			m.emitJobFinished(true, "")
-
-		case menderUpdateResultInstallationFailedSystemInconsistent,
-			menderUpdateResultInstallationFailedPleaseCommitOrRollback,
+		case menderUpdateResultInstallationFailedSystemInconsistent:
+			m.maybeClearAppDir()
+		case menderUpdateResultInstallationFailedPleaseCommitOrRollback,
 			menderUpdateResultInstallationFailedUpdateAlreadyInProgress:
 			m.logger.Warnf("Mender reported inconsistent system or pending commit/rollback after installation. Starting recovery install.")
 			m.startRecoverInstall()
@@ -300,11 +300,7 @@ func (m *menderManager) handleRecoverInstallCommittingEvent(event menderEvent) {
 			m.logger.Warnf("Recovery commit failed with pending commit/rollback. Starting recovery install again.")
 			m.startRecoverInstall()
 		case menderUpdateResultInstallationFailedSystemInconsistent:
-			if m.state.CurrentEntityType == entityTypeApplication {
-				m.clearAppDir()
-			} else {
-				m.emitRecoverfinished(false, "system in inconsistent state")
-			}
+			m.maybeClearAppDir()
 		case menderUpdateResultInstallationFailedSystemNotModified,
 			menderUpdateResultInstallationFailedRolledBack,
 			menderUpdateResultInstallationFailedUpdateAlreadyInProgress,
@@ -378,6 +374,14 @@ func (m *menderManager) startRecoverInstall() {
 	m.logger.Infof("Starting recovery install for entity %s of type %s", m.state.CurrentEntityName, m.state.CurrentEntityType)
 	m.state.State = menderStateRecoverInstallCommitting
 	m.runMenderCommitInBackGround(commitTimeout)
+}
+
+func (m *menderManager) maybeClearAppDir() {
+	if m.state.CurrentEntityType == entityTypeApplication {
+		m.clearAppDir()
+	} else {
+		m.emitRecoverfinished(false, "system in inconsistent state")
+	}
 }
 
 func (m *menderManager) clearAppDir() {

@@ -8,6 +8,9 @@ ${APP_NAME}  nginx-demo
 *** Test Cases ***
 Reboot during application update shall recover and complete update
 
+    IF  '${SIMULATION_MODE}' != 'true' 
+        SKIP   same as 04_serverrestart.robot for non-simulation mode
+    END
     ${result}=    Run Process   mender-update   err-inject  after-stop-old-containers
     Log To Console    ${result.stdout} ${result.stderr} ${result.rc}
     Should Be Equal As Integers    ${result.rc}    0

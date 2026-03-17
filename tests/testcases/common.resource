@@ -34,6 +34,7 @@ Crash and Restart SUT
         Sleep  3s
     ELSE
         Set To Dictionary    ${duts.DUT1}  IP_ADDRESS=${DUT_IP}
+        Open SSH Connection to DUT
         Sleep  1.5s
         Log To Console    Rebooting DUT
         SSH Command Should Succeed    reboot
