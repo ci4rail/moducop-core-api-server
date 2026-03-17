@@ -19,7 +19,7 @@ jobs:
         with:
           lfs: true
           submodules: recursive
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.FW_CI_TOKEN }}
 
       - name: Verify Go code
         uses: ./.github/actions/go-verify
