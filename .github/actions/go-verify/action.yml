@@ -39,4 +39,4 @@ runs:
 
     - name: Run all tests
       shell: bash
-      run: make test
+      run: make unit-test

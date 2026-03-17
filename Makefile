@@ -52,8 +52,8 @@ lint-reports: out/lint.xml
 out/lint.xml: $(GOLANGCI_LINT) out download
 	@$(GOLANGCI_LINT) run ./... --out-format checkstyle | tee "$(@)"
 
-
-test: unit-test ## Backward-compatible alias for CI and local usage
+test-with-mocks:
+	@make -C tests mock-test
 
 unit-test: ## Runs all tests
 	@go test $(ARGS) ./...
