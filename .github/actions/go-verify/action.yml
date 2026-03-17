@@ -5,19 +5,10 @@ inputs:
   go-version:
     description: Go version to install.
     required: true
-  lfs:
-    description: Whether to fetch Git LFS objects during checkout.
-    required: false
-    default: "true"
 
 runs:
   using: composite
   steps:
-    - name: Checkout code
-      uses: actions/checkout@v6.0.2
-      with:
-        lfs: ${{ inputs.lfs }}
-
     - name: Install Go
       uses: actions/setup-go@v6.2.0
       with:

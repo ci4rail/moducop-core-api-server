@@ -19,11 +19,15 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+        with:
+          lfs: true
+
       - name: Verify Go code
         uses: ./.github/actions/go-verify
         with:
           go-version: ${{ matrix.go-version }}
-          lfs: "true"
 
   create-release:
     name: release
