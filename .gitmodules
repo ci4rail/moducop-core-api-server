@@ -1,0 +1,3 @@
+[submodule "tests/robot-helpers"]
+	path = tests/robot-helpers
+	url = https://github.com/ci4rail/robot-helpers.git

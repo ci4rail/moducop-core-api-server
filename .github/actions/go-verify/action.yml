@@ -1,0 +1,42 @@
+name: Go Verify
+description: Checkout the repository, prepare Go tooling, lint, and run tests.
+
+inputs:
+  go-version:
+    description: Go version to install.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install Go
+      uses: actions/setup-go@v6.2.0
+      with:
+        go-version: ${{ inputs.go-version }}
+
+    - name: Set up Go environment
+      shell: bash
+      run: |
+        mkdir -p ~/go/bin
+        echo "~/go/bin" >> "$GITHUB_PATH"
+
+    - uses: actions/cache@v5.0.3
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      shell: bash
+      run: make download
+
+    - name: Lint all code with golangci-lint
+      shell: bash
+      run: make lint
+
+    - name: Run all tests
+      shell: bash
+      run: make unit-test

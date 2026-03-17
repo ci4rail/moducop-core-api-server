@@ -9,64 +9,42 @@ jobs:
   test:
     strategy:
       matrix:
-        go-version: [1.20.x]
+        go-version: [1.26.1]
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
+        with:
+          lfs: true
+          submodules: recursive
+          token: ${{ secrets.FW_CI_TOKEN }}
 
-      - name: Install Go
-        uses: actions/setup-go@v4
+      - name: Verify Go code
+        uses: ./.github/actions/go-verify
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: Set up Go environment
-        run: |
-          mkdir -p ~/go/bin
-          echo "~/go/bin" >> $GITHUB_PATH
-
-      - uses: actions/cache@v4
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
         with:
+          python-version: "3.13"
+
+      - name: Install Python test dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Build mocks
+        run: make mocks
+
+      - name: Run mock integration tests
+        run: make test-with-mocks
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: test-results
           path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Download dependencies
-        run: make download
-
-      - name: Lint all code with golangci-lint
-        run: make lint
-
-      - name: Run all tests
-        run: make test
-
-  build-and-push-pr-image:
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      - name: Build and Push Docker image
-        id: build-and-upload
-        env:
-          IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
-          IMAGE_TAG: pr-${{ github.head_ref }}
-        run: |
-          docker buildx build --platform linux/amd64,linux/arm64 --push -t $IMAGE_NAME:$IMAGE_TAG .
-          echo "docker_image=$IMAGE_NAME:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Output Docker image
-        run: |
-          echo "Docker image available at: ${{ steps.build-and-upload.outputs.docker_image }}"
+            tests/results/log.html
+            tests/results/sut.log

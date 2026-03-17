@@ -2,7 +2,7 @@ SHELL=/bin/bash -e -o pipefail
 PWD = $(shell pwd)
 
 # constants
-GOLANGCI_VERSION = 1.60.3
+GOLANGCI_VERSION = 2.11.3
 DOCKER_REPO = ghcr.io/ci4rail/go-template
 DOCKER_TAG = latest
 PLATFORMS = linux/amd64,linux/arm64,linux/arm/v7
@@ -37,13 +37,14 @@ GO_BUILD = mkdir -pv "$(@)" && go build -ldflags="-w -s" -o "$(@)" ./...
 out/bin:
 	$(GO_BUILD)
 
+
 GOLANGCI_LINT = bin/golangci-lint-$(GOLANGCI_VERSION)
 $(GOLANGCI_LINT):
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v1.60.3/install.sh | bash -s -- -b bin v$(GOLANGCI_VERSION)
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v$(GOLANGCI_VERSION)/install.sh | bash -s -- -b bin v$(GOLANGCI_VERSION)
 	@mv bin/golangci-lint "$(@)"
 
 lint: fmt $(GOLANGCI_LINT) download ## Lints all code with golangci-lint
-	@$(GOLANGCI_LINT) run
+	@$(GOLANGCI_LINT) run ./...
 
 lint-reports: out/lint.xml
 
@@ -51,7 +52,10 @@ lint-reports: out/lint.xml
 out/lint.xml: $(GOLANGCI_LINT) out download
 	@$(GOLANGCI_LINT) run ./... --out-format checkstyle | tee "$(@)"
 
-test: ## Runs all tests
+test-with-mocks:
+	@make -C tests mock-test
+
+unit-test: ## Runs all tests
 	@go test $(ARGS) ./...
 
 coverage: out/report.json ## Displays coverage per func on cli
@@ -73,6 +77,14 @@ docker: ## Builds docker image
 	docker buildx build --platform $(PLATFORMS) -t $(DOCKER_REPO):$(DOCKER_TAG) --push .
 
 ci: lint-reports test-reports ## Executes lint and test and generates reports
+
+.PHONY: mocks
+mocks:
+	make -C mocks mocks
+
+.PHONY: test-mocks
+test-mocks:
+	make -C mocks test-mocks
 
 help: ## Shows the help
 	@echo 'Usage: make <OPTIONS> ... <TARGETS>'

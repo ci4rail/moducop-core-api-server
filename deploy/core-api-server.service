@@ -1,0 +1,12 @@
+[Unit]
+Description=Moducop Core API Server
+After=docker.service
+
+[Service]
+Type=simple
+ExecStart=/root/core-api-server --server.address 0.0.0.0:8090 --log.level debug
+
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target

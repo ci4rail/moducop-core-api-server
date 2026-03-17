@@ -1,0 +1,1 @@
+export MOCK_MENDER_STATE_DIR=`pwd`/mock-mender-state && rm -rf $MOCK_MENDER_STATE_DIR && mocks/bin/preparefs

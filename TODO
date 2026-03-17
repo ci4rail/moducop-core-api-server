@@ -1,0 +1,40 @@
+CPUManager
+[x] detect reboot
+[x] handle crash/restart of api-server
+[x] mender inconsistent state handling
+[x] endpoint PUT software/core-os
+[x] endpoint GET software/core-os
+[x] endpoint GET software/application
+[x] endpoint GET software/applications  -- list applications
+[x] endpoint GET software/io4edge/{devicename}
+[x] endpoint PUT software/io4edge/{devicename}
+[x] endpoint GET hardware
+[x] endpoint GET hardware/io4edge-devices  -- list io4edge devices
+[x] endpoint POST system/reboot
+
+[x] io4edge Manager
+[ ] when to scan for io4edge devices
+Mocks
+[x] preparefs
+[x] simulate /proc/sys/kernel/random/boot_id
+[x] ee-inv
+[x] io4edge-cli
+
+
+Testing
+
+[x] Mock tests
+
+
+
+Real Target 
+
+---
+Outside this repo
+
+[ ] Repo application generation
+[x] OpenAPI spec update
+
+[ ] user-docs
+
+[ ] systemd deployment
