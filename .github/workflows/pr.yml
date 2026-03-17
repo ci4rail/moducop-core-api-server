@@ -38,3 +38,12 @@ jobs:
 
       - name: Run mock integration tests
         run: make test-with-mocks
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: test-results
+          path: |
+            tests/results/log.html
+            tests/results/sut.log
