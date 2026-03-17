@@ -17,7 +17,10 @@ import (
 	"strings"
 )
 
-const maxExtractedTarFileSize = 1024 * 1024 * 1024
+const (
+	maxRootfsExtractedTarFileSize   = 2 * 1024 * 1024 * 1024
+	maxManifestExtractedTarFileSize = 256 * 1024 * 1024
+)
 
 type HeaderInfo struct {
 	Payloads []struct {
@@ -327,7 +330,7 @@ func extractTarGzBytes(data []byte, outDir string) error {
 			if err != nil {
 				return err
 			}
-			if err := copyTarEntryWithLimit(f, tr, h.Name); err != nil {
+			if err := copyTarEntryWithLimit(f, tr, h.Name, h.Size, maxRootfsExtractedTarFileSize); err != nil {
 				_ = f.Close()
 				return err
 			}
@@ -440,7 +443,7 @@ func extractManifestTar(manifestsTar []byte, appManifestDir string) error {
 			if err != nil {
 				return err
 			}
-			if err := copyTarEntryWithLimit(f, tr, h.Name); err != nil {
+			if err := copyTarEntryWithLimit(f, tr, h.Name, h.Size, maxManifestExtractedTarFileSize); err != nil {
 				_ = f.Close()
 				return err
 			}
@@ -451,13 +454,17 @@ func extractManifestTar(manifestsTar []byte, appManifestDir string) error {
 	}
 }
 
-func copyTarEntryWithLimit(dst io.Writer, src io.Reader, name string) error {
-	written, err := io.CopyN(dst, src, maxExtractedTarFileSize+1)
+func copyTarEntryWithLimit(dst io.Writer, src io.Reader, name string, size, maxSize int64) error {
+	if size > maxSize {
+		return fmt.Errorf("tar entry too large: %s", name)
+	}
+
+	written, err := io.CopyN(dst, src, size)
 	if err != nil && !errors.Is(err, io.EOF) {
 		return err
 	}
-	if written > maxExtractedTarFileSize {
-		return fmt.Errorf("tar entry too large: %s", name)
+	if written != size {
+		return fmt.Errorf("short read for tar entry %s: got %d, want %d", name, written, size)
 	}
 	return nil
 }

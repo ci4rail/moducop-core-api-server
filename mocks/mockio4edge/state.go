@@ -12,7 +12,7 @@ import (
 const (
 	defaultStateDir     = "/tmp/mock-mender"
 	stateFileName       = "io4edge-state.json"
-	defaultFirmwareName = "iou16-00-default"
+	defaultFirmwareName = "fw-iou16-00-default"
 	defaultVersion      = "1.0.0"
 	devicePrefix        = "S100-IUO16-USB-EXT1"
 )

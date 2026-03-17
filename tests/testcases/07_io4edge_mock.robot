@@ -4,7 +4,7 @@ Test Tags    io4edge-mock
 
 *** Variables ***
 ${DEV_BASE_NAME}  S100-IUO16-USB-EXT1-UC
-${FW_NAME}  iou16-00-default
+${FW_NAME}  fw-iou16-00-default
 
 *** Test Cases ***
 

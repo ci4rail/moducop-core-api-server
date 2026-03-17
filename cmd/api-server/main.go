@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/ci4rail/moducop-core-api-server/internal/buildinfo"
 	"github.com/ci4rail/moducop-core-api-server/internal/loglite"
 	"github.com/ci4rail/moducop-core-api-server/internal/manager/cpumanager"
 	"github.com/ci4rail/moducop-core-api-server/internal/manager/io4edgemanager"
@@ -33,13 +34,20 @@ const errInvalidLogLevel staticError = "expected one of debug|info|warn|error|of
 func main() {
 	serverAddress := flag.String("server.address", defaultServerAddress, "HTTP server listen address")
 	logLevelFlag := flag.String("log.level", "info", "Log level: debug|info|warn|error|off")
+	printVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
+
+	if *printVersion {
+		fmt.Println(buildinfo.Version)
+		return
+	}
 
 	logLevel, err := parseLogLevel(*logLevelFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "invalid --log.level: %v\n", err)
 		os.Exit(exitCodeUsageError)
 	}
+	loglite.New("main", os.Stdout, logLevel).Infof("starting moducop-core-api-server version %s", buildinfo.Version)
 
 	statePath := prefixfs.Path(cpuManagerPersistentStatePath)
 	if err := os.MkdirAll(filepath.Dir(statePath), dirModeDefault); err != nil {
