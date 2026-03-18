@@ -39,3 +39,5 @@ sshpass -p "$pass" ssh $ssh_opts "root@$dut_ip" \
 
 sshpass -p "$pass" ssh $ssh_opts "root@$dut_ip" \
     "rm -rf /data/core-api-server; systemctl daemon-reload; systemctl enable core-api-server.service; systemctl start core-api-server.service"
+
+sleep 10

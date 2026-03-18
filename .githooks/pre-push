@@ -2,10 +2,32 @@
 
 echo "Pre-push hook triggered"
 
-STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep "\.go$")
+ZERO_SHA="0000000000000000000000000000000000000000"
+EMPTY_TREE_SHA=$(git hash-object -t tree /dev/null)
+PUSHED_GO_FILES=""
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Skip deleted refs.
+  if [ "$local_sha" = "$ZERO_SHA" ]; then
+    continue
+  fi
+
+  if [ "$remote_sha" = "$ZERO_SHA" ]; then
+    CHANGED_FILES=$(git diff --name-only "$EMPTY_TREE_SHA" "$local_sha")
+  else
+    CHANGED_FILES=$(git diff --name-only "$remote_sha" "$local_sha")
+  fi
+
+  GO_FILES=$(printf '%s\n' "$CHANGED_FILES" | grep "\.go$" || true)
+  if [ "$GO_FILES" != "" ]; then
+    PUSHED_GO_FILES="$PUSHED_GO_FILES
+$GO_FILES"
+  fi
+  echo "pushed go files: $PUSHED_GO_FILES"
+done
 
 # only lint if Go files have changed
-if [ "$STAGED_GO_FILES" = "" ]; then
+if [ "$PUSHED_GO_FILES" = "" ]; then
   exit 0
 fi
 
