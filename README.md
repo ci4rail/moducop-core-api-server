@@ -12,3 +12,14 @@ Functionality:
 ## API Spec
 
 OpenAPI spec is here: https://github.com/ci4rail/moducop-core-api-server-spec
+
+
+## Installation 
+
+As long as the core-api-server is not part of the rootfs image, it can be installed by deploying the provided tarball to the device. 
+
+copy the tarball to the device, for example to /data, and run the following command on the device:
+```
+tar -C /data -xf  /data/core-api-server-<version>-linux-arm64-deployment.tar.gz
+reboot
+```
