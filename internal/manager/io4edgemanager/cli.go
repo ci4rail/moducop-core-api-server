@@ -21,11 +21,11 @@ func (m *Io4edgeManager) startUpdate(deviceName string) {
 		return
 	}
 	go func() {
-		stdout, stderr, err := m.runIo4edgeCLI(updateFirmwareTimeout, "-d", deviceName, "load-firmware", d.FwPackage)
+		_, _, err := m.runIo4edgeCLI(updateFirmwareTimeout, "-d", deviceName, "load-firmware", d.FwPackage)
 		ce := cliEvent{
 			DeviceName: deviceName,
 			Success:    err == nil,
-			Message:    fmt.Sprintf("stdout: %s, stderr: %s, err: %v", stdout, stderr, err),
+			Message:    fmt.Sprintf("err: %v", err),
 		}
 		m.logger.Infof("io4edge-cli finished: %v", ce)
 		m.inbox <- ce

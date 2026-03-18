@@ -1,0 +1,14 @@
+[Unit]
+Description=Moducop Core API Server
+After=docker.service
+
+[Service]
+Type=simple
+# For testing, the port is opened to the outside world.
+# In production, this should be changed to localhost only.
+ExecStart=/root/bin/core-api-server --server.address 0.0.0.0:8090 --log.level debug
+
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target

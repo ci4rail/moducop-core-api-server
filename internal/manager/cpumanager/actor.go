@@ -95,7 +95,7 @@ func (m *CPUManager) handleCommand(cmd Command) {
 
 // handleMenderEvent handles events emitted by the mender manager.
 func (m *CPUManager) handleMenderEvent(cmd MenderEvent) {
-	m.logger.Infof("Handling mender event: %s", cmd.event.Code)
+	m.logger.Debugf("Handling mender event: %s", cmd.event.Code)
 
 	switch cmd.event.Code {
 	case menderEventNone:
@@ -309,7 +309,7 @@ func (m *CPUManager) setInitialPersistentState() {
 	} else {
 		m.state.BootID = bootid
 	}
-	m.logger.Infof("Initialized state with %+v", m.state)
+	m.logger.Debugf("Initialized state with %+v", m.state)
 }
 
 func (m *CPUManager) saveState() {
