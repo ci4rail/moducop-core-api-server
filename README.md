@@ -1,49 +1,14 @@
-# go-template
+# moducop-core-api-server
 
-a go-template project
+moducop-core-api-server is a REST API Server that abstracts management functions of moducop devices (embedded Linux devices using ARM64 processor based on Toradex Verdin SoM).
 
-The project uses `make` to make your life easier. 
+Functionality:
+- Linux Rootfs Update via mender https://docs.mender.io/
+- Application Update via mender-artifact and docker compose
+- Secondary device updates for io4edge devices: https://docs.ci4rail.com/user-docs/io4edge/ 
+- Reboot
+- May be extended later to support log file retrieval, metrics retrieval, etc.
 
-Whenever you need help regarding the available actions, just use the following command.
+## API Spec
 
-```bash
-make help
-```
-
-## Bootstrap
-
-When moving a go project you have to adjust the module path and docker image name.
-Search for `ci4rail/go-template` and replace all matches with your new repository.
-
-## Setup
-
-To get your setup up and running the only thing you have to do is
-
-```bash
-make all
-```
-
-This will initialize a git repo, download the dependencies in the latest versions and install all needed tools.
-If needed code generation will be triggered in this target as well.
-
-## Test & lint
-
-Run linting
-
-```bash
-make lint
-```
-
-Run tests
-
-```bash
-make test
-```
-
-## create multiarch docker image
-
-Run docker build and push
-
-```bash
-make docker
-```
+OpenAPI spec is here: https://github.com/ci4rail/moducop-core-api-server-spec
