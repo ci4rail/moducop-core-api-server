@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // loglite is a simple logger wrapper around log.Logger with levels, timestamps, and caller info.
 package loglite
 

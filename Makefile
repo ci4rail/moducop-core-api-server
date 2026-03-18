@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
+#
+# SPDX-License-Identifier: Apache-2.0
+
 SHELL=/bin/bash -e -o pipefail
 PWD = $(shell pwd)
 

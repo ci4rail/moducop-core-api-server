@@ -1,1 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
+#
+# SPDX-License-Identifier: Apache-2.0
+
 *.fwpkg filter=lfs diff=lfs merge=lfs -text

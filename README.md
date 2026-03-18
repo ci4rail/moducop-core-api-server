@@ -13,6 +13,22 @@ Functionality:
 
 OpenAPI spec is here: https://github.com/ci4rail/moducop-core-api-server-spec
 
+## Integration Testing
+
+To run the tests, 
+* ensure you have python3 and the packages listed in `requirements.txt` installed
+
+### Testing with Mocks
+For testing the moducop-core-api-server on developer machines and in CI pipelines, there is a mock implementation of the commands used by the server. See mocks/AGENTS.md for details.
+
+* run `make mocks`
+* run `make test-with-mocks`.
+
+### Testing with real devices
+
+Tests can also run on real devices, currently Moducops with Verdin IMX8MM only. 
+Have the moducop connected to the same network as the machine running the tests, enter it's IP address in `tests/Makefile` and run `cd tests && make real-hardware`.
+Note: This reset the device to a factory-like state, so only run this if you are sure that this is ok.
 
 ## Installation 
 

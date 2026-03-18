@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
+#
+# SPDX-License-Identifier: Apache-2.0
+
 *** Settings ***
 Resource     common.resource
 Test Tags  mender  coreos  application

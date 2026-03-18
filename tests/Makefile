@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
+#
+# SPDX-License-Identifier: Apache-2.0
+
 mock-test:
 	robot -d results -X -i mender -i io4edge-mock -i hardware testcases/
 

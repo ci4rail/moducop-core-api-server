@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
+#
+# SPDX-License-Identifier: Apache-2.0
+
 mocks: mender-update docker reboot preparefs io4edge-cli ee-inv
 
 mender-update: ## Simulates mender-update for rootfs and application updates

@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 package menderartifact
 
 import (
