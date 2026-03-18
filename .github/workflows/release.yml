@@ -67,6 +67,9 @@ jobs:
       - create-release
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.1'
       - uses: wangyoucao577/go-release-action@v1.55
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -78,4 +81,30 @@ jobs:
           goversion: "https://go.dev/dl/go1.26.1.linux-amd64.tar.gz"
           project_path: "./cmd/api-server"
           binary_name: "core-api-server"
-          extra_files: CHANGELOG.md
+          extra_files: LICENSE CHANGELOG.md
+      - name: Build deployment package binary
+        run: >
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64
+          go build
+          -tags netgo,osusergo,static_build
+          -ldflags "-X github.com/ci4rail/moducop-core-api-server/internal/buildinfo.Version=v${{ needs.create-release.outputs.new_release_version }}"
+          -o dist/deployment/overlay-root/upper/bin/core-api-server
+          ./cmd/api-server
+      - name: Add deployment service file
+        run: >
+          install -D -m 0644
+          deploy/overlay-etc/upper/systemd/system/multi-user.target.wants/core-api-server.service
+          dist/deployment/overlay-etc/upper/systemd/system/multi-user.target.wants/core-api-server.service
+      - name: Create deployment archive
+        run: >
+          tar -C dist/deployment -czf
+          core-api-server-v${{ needs.create-release.outputs.new_release_version }}-linux-arm64-deployment.tar.gz
+          .
+      - name: Upload deployment archive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release upload
+          v${{ needs.create-release.outputs.new_release_version }}
+          core-api-server-v${{ needs.create-release.outputs.new_release_version }}-linux-arm64-deployment.tar.gz
+          --clobber
