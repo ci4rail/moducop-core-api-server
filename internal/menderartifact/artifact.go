@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // package menderartifact provides functions to read and parse Mender artifact files,
 // specifically to extract version information from the artifact headers.
 package menderartifact

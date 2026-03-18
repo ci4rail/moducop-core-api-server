@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
+#
+# SPDX-License-Identifier: Apache-2.0
+
 version: "2"
 run:
   issues-exit-code: 1

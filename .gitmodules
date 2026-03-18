@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
+#
+# SPDX-License-Identifier: Apache-2.0
+
 [submodule "tests/robot-helpers"]
 	path = tests/robot-helpers
 	url = https://github.com/ci4rail/robot-helpers.git

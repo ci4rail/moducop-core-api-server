@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Mocks overview
 
 We need mocks for all interfaces used by the moducop-core-api-server. This includes:

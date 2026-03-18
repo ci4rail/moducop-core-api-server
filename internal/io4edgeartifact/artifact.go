@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // package io4edgeartifact provides functions to read io4edge fw packages,
 // specifically to extract version information from the manifest.json.
 package io4edgeartifact

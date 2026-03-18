@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Project purpose
 
 moducop-core-api-server is a REST API Server that abstracts management functions of moducop devices (embedded Linux devices using ARM64 processor based on Toradex Verdin SoM).
