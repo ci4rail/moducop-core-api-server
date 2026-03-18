@@ -95,6 +95,9 @@ jobs:
           install -D -m 0644
           deploy/overlay-etc/upper/systemd/system/multi-user.target.wants/core-api-server.service
           dist/deployment/overlay-etc/upper/systemd/system/multi-user.target.wants/core-api-server.service
+          install -D -m 0644
+          deploy/overlay-etc/upper/systemd/system/core-api-server.service
+          dist/deployment/overlay-etc/upper/systemd/system/core-api-server.service
       - name: Create deployment archive
         run: >
           tar -C dist/deployment -czf
