@@ -122,7 +122,7 @@ func (m *menderManager) runMenderInstallInBackGround(artifact string, timeout ti
 			Code:         menderEventInstallFinished,
 			Success:      menderUpdateResultIsSuccess(result),
 			UpdateResult: result,
-			Message:      fmt.Sprintf("stdout: %s, stderr: %s, err: %v", stdout, stderr, err),
+			Message:      fmt.Sprintf("err: %v", err),
 		}
 		m.logger.Infof("Mender install finished: %v", me)
 		m.emitEvent(me)
@@ -140,7 +140,7 @@ func (m *menderManager) runMenderCommitInBackGround(timeout time.Duration) {
 			Code:         menderEventCommitFinished,
 			Success:      menderUpdateResultIsSuccess(result),
 			UpdateResult: result,
-			Message:      fmt.Sprintf("stdout: %s, stderr: %s, err: %v", stdout, stderr, err),
+			Message:      fmt.Sprintf("err: %v", err),
 		}
 		m.logger.Infof("Mender commit finished: %v", me)
 		m.emitEvent(me)
@@ -151,9 +151,9 @@ func (m *menderManager) runRebootInBackGround(timeout time.Duration) {
 	m.saveState()
 	go func() {
 		time.Sleep(rebootDelay)
-		stdout, stderr, _, err := execcli.RunCommandWithLogger("reboot", timeout, m.logger)
+		_, _, _, err := execcli.RunCommandWithLogger("reboot", timeout, m.logger)
 		if err != nil {
-			message := fmt.Sprintf("Reboot command failed: stdout: %s, stderr: %s, err: %v", stdout, stderr, err)
+			message := fmt.Sprintf("Reboot command failed: err: %v", err)
 			m.emitRebootFinished(message, err)
 		}
 	}()
@@ -180,7 +180,7 @@ func (m *menderManager) menderUpdateResultFromInstallOutput(stdout string, err e
 	for _, result := range matchOrder {
 		text := menderUpdateResultText(result)
 		if text != "" && strings.Contains(stdout, text) {
-			m.logger.Debugf("Matched mender install output to result %s", result)
+			m.logger.Debugf("Matched mender install output to result '%s'", result)
 			return result
 		}
 	}
