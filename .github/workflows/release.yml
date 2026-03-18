@@ -82,6 +82,10 @@ jobs:
           project_path: "./cmd/api-server"
           binary_name: "core-api-server"
           extra_files: LICENSE CHANGELOG.md
+      - name: Copy deployment tree
+        run: >
+          mkdir -p dist/deployment &&
+          cp -a deploy/. dist/deployment/
       - name: Build deployment package binary
         run: >
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64
@@ -90,14 +94,6 @@ jobs:
           -ldflags "-X github.com/ci4rail/moducop-core-api-server/internal/buildinfo.Version=v${{ needs.create-release.outputs.new_release_version }}"
           -o dist/deployment/overlay-root/upper/bin/core-api-server
           ./cmd/api-server
-      - name: Add deployment service file
-        run: >
-          install -D -m 0644
-          deploy/overlay-etc/upper/systemd/system/multi-user.target.wants/core-api-server.service
-          dist/deployment/overlay-etc/upper/systemd/system/multi-user.target.wants/core-api-server.service
-          install -D -m 0644
-          deploy/overlay-etc/upper/systemd/system/core-api-server.service
-          dist/deployment/overlay-etc/upper/systemd/system/core-api-server.service
       - name: Create deployment archive
         run: >
           tar -C dist/deployment -czf
