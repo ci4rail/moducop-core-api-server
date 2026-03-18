@@ -46,4 +46,4 @@ trap 'failed' ERR
 make lint
 
 # Run tests
-make test
+make unit-test
