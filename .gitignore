@@ -177,3 +177,5 @@ venv/
 
 results/
 .cache/
+
+node_modules/
