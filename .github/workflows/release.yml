@@ -70,6 +70,7 @@ jobs:
       - uses: wangyoucao577/go-release-action@v1.55
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          release_tag: v${{ needs.create-release.outputs.new_release_version }}
           ldflags: -X github.com/ci4rail/moducop-core-api-server/internal/buildinfo.Version=v${{ needs.create-release.outputs.new_release_version }}
           build_flags: -tags netgo,osusergo,static_build
           goos: linux
@@ -77,4 +78,4 @@ jobs:
           goversion: "https://go.dev/dl/go1.26.1.linux-amd64.tar.gz"
           project_path: "./cmd/api-server"
           binary_name: "core-api-server"
-          #extra_files: LICENSE README_CLI.md
+          extra_files: CHANGELOG.md
