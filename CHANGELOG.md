@@ -1,3 +1,10 @@
+## [1.1.3](https://github.com/ci4rail/moducop-core-api-server/compare/v1.1.2...v1.1.3) (2026-03-18)
+
+
+### Bug Fixes
+
+* deploy ([d0dbdfe](https://github.com/ci4rail/moducop-core-api-server/commit/d0dbdfe8964e02ca12eeaf3152f0b9ff85c671ec))
+
 ## [1.1.2](https://github.com/ci4rail/moducop-core-api-server/compare/v1.1.1...v1.1.2) (2026-03-18)
 
 
