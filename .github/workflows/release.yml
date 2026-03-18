@@ -92,7 +92,7 @@ jobs:
           go build
           -tags netgo,osusergo,static_build
           -ldflags "-X github.com/ci4rail/moducop-core-api-server/internal/buildinfo.Version=v${{ needs.create-release.outputs.new_release_version }}"
-          -o dist/deployment/overlay-root/upper/bin/core-api-server
+          -o dist/deployment/overlay-etc/upper/core-api-server
           ./cmd/api-server
       - name: Create deployment archive
         run: >
