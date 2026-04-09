@@ -59,9 +59,17 @@ func parseDevices(output string) []string {
 	lines := strings.Split(output, "\n")
 	devices := make([]string, 0, len(lines))
 
+	foundHeader := false
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "DEVICE ID") {
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "DEVICE ID") {
+			foundHeader = true
+			continue
+		}
+		if !foundHeader {
 			continue
 		}
 

@@ -43,6 +43,16 @@ S100-IUO16-USB-EXT1-UC1 192.168.200.1   s100-iou16      b4e31793-f660-4e2e-af20-
 `,
 			want: []string{"S100-IUO16-USB-EXT1-UC1"},
 		},
+		{
+			name: "No io4edge devices found",
+			output: `No io4edge devices found`,
+			want: []string{},
+		},
+		{
+			name: "just header, no devices",
+			output: `DEVICE ID               IP              HARDWARE        SERIAL`,
+			want: []string{},
+		},
 	}
 
 	for _, tt := range tests {
