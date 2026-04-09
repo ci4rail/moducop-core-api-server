@@ -183,3 +183,5 @@ results/
 .cache/
 
 node_modules/
+
+.codex
