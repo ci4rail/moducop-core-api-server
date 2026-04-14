@@ -15,6 +15,7 @@ import (
 
 	"github.com/ci4rail/moducop-core-api-server/internal/bootid"
 	"github.com/ci4rail/moducop-core-api-server/internal/loglite"
+	"github.com/ci4rail/moducop-core-api-server/internal/updatestore"
 	"github.com/ci4rail/moducop-core-api-server/pkg/diskstate"
 )
 
@@ -61,6 +62,7 @@ func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 	}
 	m.saveState()
 	m.mender = newMenderManager(m.logger, &m.state.MenderState, m.emitMenderEvent, hasRebooted, m.saveState)
+	m.cleanUpdateFiles()
 	go m.loop()
 	return m, nil
 }
@@ -323,5 +325,25 @@ func (m *CPUManager) saveState() {
 	err := m.store.Save(context.Background(), m.state)
 	if err != nil {
 		m.logger.Errorf("Failed to save state: %v", err)
+	}
+}
+
+func (m *CPUManager) cleanUpdateFiles() {
+	excludes := []string {};
+	if 	m.state.MenderState.CurrentArtifact != "" {
+		excludes = append(excludes, m.state.MenderState.CurrentArtifact)
+	}
+	for _, e := range m.state.Entities {
+		if e.MenderArtifact != "" {
+			excludes = append(excludes, e.MenderArtifact)
+		}
+	}
+	err := updatestore.Clean(m.logger, "app-*", excludes)
+	if err != nil {
+		m.logger.Errorf("Failed to clean app update files: %v", err)
+	}
+	err = updatestore.Clean(m.logger, "coreos-*", excludes)
+	if err != nil {
+		m.logger.Errorf("Failed to clean coreos update files: %v", err)
 	}
 }

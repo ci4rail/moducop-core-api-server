@@ -9,8 +9,6 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"time"
@@ -18,13 +16,11 @@ import (
 	"github.com/ci4rail/moducop-core-api-server/internal/loglite"
 	"github.com/ci4rail/moducop-core-api-server/internal/manager/cpumanager"
 	"github.com/ci4rail/moducop-core-api-server/internal/manager/io4edgemanager"
-	"github.com/ci4rail/moducop-core-api-server/internal/prefixfs"
+	"github.com/ci4rail/moducop-core-api-server/internal/updatestore"
 )
 
 const (
 	apiPrefix                   = "/api/v1"
-	updateFilePath              = "/data/core-api-server/updates/"
-	dirModeDefault              = 0o755
 	readHeaderTO                = 5 * time.Second
 	readTO                      = 300 * time.Second
 	writeTO                     = 30 * time.Second
@@ -58,7 +54,7 @@ func Start(address string, cpuManager *cpumanager.CPUManager, io4edgeManager *io
 		logger:         loglite.New("server", os.Stdout, logLevel),
 	}
 	handler := a.routes()
-	if err := ensureUpdateFilePath(); err != nil {
+	if err := updatestore.EnsurePath(); err != nil {
 		a.logger.Errorf("failed to create update file path: %v", err)
 		panic(err)
 	}
@@ -79,14 +75,6 @@ func Start(address string, cpuManager *cpumanager.CPUManager, io4edgeManager *io
 	}()
 }
 
-func ensureUpdateFilePath() error {
-	return os.MkdirAll(getUpdateFilePath(), dirModeDefault)
-}
-
-func getUpdateFilePath() string {
-	return prefixfs.Path(updateFilePath)
-}
-
 func (a *API) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("PUT "+apiPrefix+"/software/core-os", a.handleLoadCoreOS)
@@ -100,33 +88,6 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET "+apiPrefix+"/hardware", a.handleGetHardwareInfo)
 	mux.HandleFunc("GET "+apiPrefix+"/hardware/io4edge-devices", a.handleListIo4EdgeDevices)
 	return mux
-}
-
-// Save body to a temporary file and return the path to the file.
-// The caller is responsible for deleting the file when it is no longer needed.
-// Return path, errCode, error
-func (a *API) saveBodyToFile(body io.Reader, tempPattern string) (string, string, error) {
-	tmp, err := os.CreateTemp(getUpdateFilePath(), tempPattern)
-	if err != nil {
-		return "", errCodeCreateTempFailed, fmt.Errorf("failed to create temporary file: %w", err)
-	}
-	a.logger.Debugf("Download to %s", tmp.Name())
-
-	tmpPath := tmp.Name()
-	defer func() {
-		_ = tmp.Close()
-	}()
-
-	_, err = io.Copy(tmp, body)
-	if err != nil {
-		return "", errCodeReadBodyFailed, fmt.Errorf("failed to read request body: %w", err)
-	}
-
-	if err := tmp.Close(); err != nil {
-		return "", errCodeFinalizeFileFailed, fmt.Errorf("failed to finalize update file: %w", err)
-	}
-
-	return tmpPath, "", nil
 }
 
 func (a *API) writeJSONError(w http.ResponseWriter, status int, code, message string) {
