@@ -21,7 +21,7 @@ const (
 )
 
 func (m *Io4edgeManager) startUpdate(deviceName string) {
-	d, ok := m.state.Devices[deviceName]
+	d, ok := m.deviceState[deviceName]
 	if !ok {
 		m.logger.Errorf("device %s not found in state", deviceName)
 		return
@@ -86,8 +86,8 @@ func parseDevices(output string) []string {
 	return devices
 }
 
-func (m *Io4edgeManager) firmwareVersionFromDevice(d *io4edgeDevice) NameVersion {
-	stdout, stderr, err := m.runIo4edgeCLI(getFwTimeout, "-d", d.Name, "fw")
+func (m *Io4edgeManager) firmwareVersionFromDevice(deviceName string) NameVersion {
+	stdout, stderr, err := m.runIo4edgeCLI(getFwTimeout, "-d", deviceName, "fw")
 	if err != nil {
 		m.logger.Errorf("io4edge-cli fw failed: %v, stderr: %s", err, stderr)
 		return NameVersion{}
