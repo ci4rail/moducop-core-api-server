@@ -7,8 +7,6 @@
 package io4edgemanager
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -17,7 +15,6 @@ import (
 
 	"github.com/ci4rail/moducop-core-api-server/internal/io4edgeartifact"
 	"github.com/ci4rail/moducop-core-api-server/internal/loglite"
-	"github.com/ci4rail/moducop-core-api-server/pkg/diskstate"
 )
 
 const (
@@ -25,38 +22,20 @@ const (
 	updateFirmwareTimeout = 10 * time.Minute
 )
 
-type persistentState struct {
-	Devices map[string]*io4edgeDevice // key: device name, value: device state
-}
-
 type Io4edgeManager struct {
-	logger *loglite.Logger
-	inbox  chan Command
-	quit   chan struct{}
-	store  *diskstate.Store[persistentState]
-	state  persistentState
+	logger      *loglite.Logger
+	inbox       chan Command
+	quit        chan struct{}
+	deviceState map[string]*io4edgeDevice // key: device name, value: device state
 }
 
-func New(persistentPath string, logLevel loglite.Level) (*Io4edgeManager, error) {
+func New(logLevel loglite.Level) (*Io4edgeManager, error) {
 	m := &Io4edgeManager{
 		logger: loglite.New("io4edgemanager", os.Stdout, logLevel),
 		inbox:  make(chan Command, inboxSize),
 		quit:   make(chan struct{}),
-		store:  diskstate.New[persistentState](persistentPath),
 	}
-	if err := m.store.Load(context.Background(), &m.state); err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("failed to load persistent state: %w", err)
-		}
-		m.state = persistentState{
-			Devices: make(map[string]*io4edgeDevice),
-		}
-		m.logger.Infof("Persistent state file does not exist, initializing new state")
-	} else {
-		m.logger.Infof("Loaded persistent state: %+v", m.state)
-	}
-	m.initDeviceStates()
-	m.saveState()
+	m.deviceState = make(map[string]*io4edgeDevice)
 	go m.loop()
 	return m, nil
 }
@@ -65,22 +44,23 @@ func (m *Io4edgeManager) loop() {
 	for {
 		select {
 		case <-m.quit:
-			m.saveState()
 			return
 		case cmd := <-m.inbox:
 			m.handleCommand(cmd)
 		}
-		m.saveState()
 	}
 }
 
 func (m *Io4edgeManager) handleCommand(cmd Command) {
 	switch c := cmd.(type) {
 	case StartUpdate:
+		_ = m.updateDeviceState(c.DeviceName)
 		m.handleUpdate(c.DeviceName, c.PathToFWPKG, c.Reply)
 	case GetState:
+		_ = m.updateDeviceState(c.DeviceName)
 		m.handleGetState(c.DeviceName, c.Reply)
 	case ListDeviceNames:
+		m.scanAndUpdateDeviceStates()
 		m.handleListDeviceNames(c.Reply)
 	case cliEvent:
 		m.handleCliEvent(c)
@@ -91,7 +71,7 @@ func (m *Io4edgeManager) handleCommand(cmd Command) {
 
 // handleCliEvent is triggered when io4edge-cli finished. Currently only for device updates
 func (m *Io4edgeManager) handleCliEvent(event cliEvent) {
-	d, ok := m.state.Devices[event.DeviceName]
+	d, ok := m.deviceState[event.DeviceName]
 	if !ok {
 		m.logger.Errorf("device %s not found in state", event.DeviceName)
 		return
@@ -99,7 +79,7 @@ func (m *Io4edgeManager) handleCliEvent(event cliEvent) {
 	m.logger.Infof("Handling CLI event (update done on %s): %v", d.Name, event)
 	if event.Success {
 		// read back current firmware version
-		d.CurrentNV = m.firmwareVersionFromDevice(d)
+		d.CurrentNV = m.firmwareVersionFromDevice(d.Name)
 		if d.CurrentNV.Name == d.DeployingNV.Name && d.CurrentNV.Version == d.DeployingNV.Version {
 			d.DeployStatus = DeployStatus{
 				Code:    DeployStatusCodeSuccess,
@@ -126,7 +106,7 @@ func (m *Io4edgeManager) handleUpdate(
 	fwPackage string,
 	reply chan Result[struct{}],
 ) {
-	dev, exists := m.state.Devices[deviceName]
+	dev, exists := m.deviceState[deviceName]
 	if !exists {
 		reply <- Result[struct{}]{Err: NewCodedError(ErrCodeDeviceNotFound, "Unknown device "+deviceName)}
 		return
@@ -159,7 +139,7 @@ func (m *Io4edgeManager) handleUpdate(
 }
 
 func (m *Io4edgeManager) handleGetState(deviceName string, reply chan Result[Io4edgeFWStatus]) {
-	dev, exists := m.state.Devices[deviceName]
+	dev, exists := m.deviceState[deviceName]
 	if !exists {
 		reply <- Result[Io4edgeFWStatus]{Err: NewCodedError(ErrCodeDeviceNotFound, "Unknown device "+deviceName)}
 		return
@@ -171,21 +151,14 @@ func (m *Io4edgeManager) handleGetState(deviceName string, reply chan Result[Io4
 }
 
 func (m *Io4edgeManager) handleListDeviceNames(reply chan Result[[]string]) {
-	devs := make([]string, 0, len(m.state.Devices))
-	for name := range m.state.Devices {
+	devs := make([]string, 0, len(m.deviceState))
+	for name := range m.deviceState {
 		devs = append(devs, name)
 	}
 	// sort device names for consistent order
 	sort.Strings(devs)
 
 	reply <- Result[[]string]{Value: devs}
-}
-
-func (m *Io4edgeManager) saveState() {
-	err := m.store.Save(context.Background(), m.state)
-	if err != nil {
-		m.logger.Errorf("Failed to save state: %v", err)
-	}
 }
 
 // In most manifest files, the name is missing the leading "fw-" part, but firmware reports
