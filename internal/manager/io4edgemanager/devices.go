@@ -44,10 +44,10 @@ func (m *Io4edgeManager) updateDeviceState(deviceName string) error {
 		delete(m.deviceState, deviceName)
 		return fmt.Errorf("failed to get firmware version for device %s", deviceName)
 	}
-
+	var dev *io4edgeDevice
 	dev, ok := m.deviceState[deviceName]
 	if !ok {
-		dev := &io4edgeDevice{
+		dev = &io4edgeDevice{
 			Name: deviceName,
 		}
 		dev.DeployStatus.Code = DeployStatusCodeNeverDeployed

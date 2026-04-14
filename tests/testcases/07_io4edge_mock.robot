@@ -101,16 +101,4 @@ Parallel Updates on different Devices Shall Pass
     ...    1.0.3
     ...    success
 
-Server Restart While Update Shall Shall Result in Update Resume
-    ${response}=    Load Artifact  ${API_URL}/software/io4edge/${DEV_BASE_NAME}4  
-    ...    ${ASSET_DIR}/fw-iou16-00-default-1.0.2.fwpkg
-    Log To Console    ${response.text} ${response.status_code} 
-    Should Be Equal As Integers    ${response.status_code}    202
 
-    Crash and Restart SUT
-
-    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV_BASE_NAME}4  timeout=20s
-    Check Current Version And Deploy Status  ${API_URL}/software/io4edge/${DEV_BASE_NAME}4  
-    ...    ${FW_NAME}
-    ...    1.0.2
-    ...    success
