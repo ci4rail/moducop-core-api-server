@@ -65,33 +65,41 @@ func RunCommandWithLogger(cmd string, timeout time.Duration, logger *loglite.Log
 		flushLogWriter(stderrLogger)
 	}()
 
-	waitCh := make(chan error, 1)
-	go func() { waitCh <- c.Wait() }()
+	readDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(readDone)
+	}()
 
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	timedOut := false
 	select {
-	case waitErr := <-waitCh:
-		wg.Wait()
-		stdout, stderr = outBuf.String(), errBuf.String()
-		exitCode = c.ProcessState.ExitCode()
-		if waitErr != nil {
-			return stdout, stderr, exitCode, fmt.Errorf("command failed: %w", waitErr)
-		}
-		return stdout, stderr, exitCode, nil
-
-	case <-time.After(timeout):
-		// kill whole process group
+	case <-readDone:
+	case <-timer.C:
+		timedOut = true
+		// Kill the whole process group so children do not outlive the timeout.
 		_ = syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
-		waitErr := <-waitCh
-		wg.Wait()
-		stdout, stderr = outBuf.String(), errBuf.String()
-		if c.ProcessState != nil {
-			exitCode = c.ProcessState.ExitCode()
-		} else {
-			exitCode = -1
-		}
+		<-readDone
+	}
+
+	waitErr := c.Wait()
+	stdout, stderr = outBuf.String(), errBuf.String()
+	if c.ProcessState != nil {
+		exitCode = c.ProcessState.ExitCode()
+	} else {
+		exitCode = -1
+	}
+
+	if timedOut {
 		log.Printf("command timed out after %s", timeout)
 		return stdout, stderr, exitCode, fmt.Errorf("timeout after %s: %w", timeout, waitErr)
 	}
+	if waitErr != nil {
+		return stdout, stderr, exitCode, fmt.Errorf("command failed: %w", waitErr)
+	}
+	return stdout, stderr, exitCode, nil
 }
 
 type logWriter struct {
