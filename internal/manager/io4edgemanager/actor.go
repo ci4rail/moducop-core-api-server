@@ -29,7 +29,7 @@ type Io4edgeManager struct {
 	deviceState map[string]*io4edgeDevice // key: device name, value: device state
 }
 
-func New(persistentPath string, logLevel loglite.Level) (*Io4edgeManager, error) {
+func New(logLevel loglite.Level) (*Io4edgeManager, error) {
 	m := &Io4edgeManager{
 		logger: loglite.New("io4edgemanager", os.Stdout, logLevel),
 		inbox:  make(chan Command, inboxSize),

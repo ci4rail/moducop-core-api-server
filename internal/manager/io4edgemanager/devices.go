@@ -34,8 +34,8 @@ func (m *Io4edgeManager) scanAndUpdateDeviceStates() {
 	}
 }
 
-// updateDeviceState updates the state of a single device by reading its current firmware version. 
-// If the device is not already in the state, it will be added. 
+// updateDeviceState updates the state of a single device by reading its current firmware version.
+// If the device is not already in the state, it will be added.
 // If the device is no longer present, it will be removed from the state.
 func (m *Io4edgeManager) updateDeviceState(deviceName string) error {
 	currentNV := m.firmwareVersionFromDevice(deviceName)
