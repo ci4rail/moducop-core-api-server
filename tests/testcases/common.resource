@@ -16,6 +16,7 @@ ${DUT_IP}       \
 ${API_URL}        http://localhost:8090/api/v1
 ${ASSET_DIR}      ${EXECDIR}/assets
 ${STATE_DIR}      ${EXECDIR}/../mock-mender-state
+${MOCK_FS_PATH}   ${STATE_DIR}/fs
 ${SUT_LOGFILE}    ${EXECDIR}/results/sut.log
 ${SIMULATION_MODE}  true
 ${COREOS_IMAGE1}  ${ASSET_DIR}/Moducop-CPU01_Standard-Image_v2.7.0.40ee657.20260218.1208.mender
@@ -42,7 +43,7 @@ Crash and Restart SUT
         Sleep  1.5s
         Log To Console    Rebooting DUT
         SSH Command Should Succeed    reboot
-        Sleep  30s
+        Sleep  60s
         Open SSH Connection to DUT
     END
 

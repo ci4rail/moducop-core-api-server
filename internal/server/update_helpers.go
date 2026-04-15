@@ -10,10 +10,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ci4rail/moducop-core-api-server/internal/updatestore"
 )
 
 var errRemoveOutsideUpdateDir = errors.New("refusing to remove file outside update directory")
@@ -55,8 +58,35 @@ func (a *API) handleLoadNamedUpdate(
 	w.WriteHeader(http.StatusAccepted)
 }
 
+// Save body to a temporary file and return the path to the file.
+// The caller is responsible for deleting the file when it is no longer needed.
+// Return path, errCode, error
+func (a *API) saveBodyToFile(body io.Reader, tempPattern string) (string, string, error) {
+	tmp, err := os.CreateTemp(updatestore.GetPath(), tempPattern)
+	if err != nil {
+		return "", errCodeCreateTempFailed, fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	a.logger.Debugf("Download to %s", tmp.Name())
+
+	tmpPath := tmp.Name()
+	defer func() {
+		_ = tmp.Close()
+	}()
+
+	_, err = io.Copy(tmp, body)
+	if err != nil {
+		return "", errCodeReadBodyFailed, fmt.Errorf("failed to read request body: %w", err)
+	}
+
+	if err := tmp.Close(); err != nil {
+		return "", errCodeFinalizeFileFailed, fmt.Errorf("failed to finalize update file: %w", err)
+	}
+
+	return tmpPath, "", nil
+}
+
 func removeTempUpdateFile(tmpPath string) error {
-	baseDir := filepath.Clean(getUpdateFilePath())
+	baseDir := filepath.Clean(updatestore.GetPath())
 	cleanPath := filepath.Clean(tmpPath)
 	prefix := baseDir + string(filepath.Separator)
 	if !strings.HasPrefix(cleanPath, prefix) {

@@ -15,6 +15,7 @@ import (
 
 	"github.com/ci4rail/moducop-core-api-server/internal/io4edgeartifact"
 	"github.com/ci4rail/moducop-core-api-server/internal/loglite"
+	"github.com/ci4rail/moducop-core-api-server/internal/updatestore"
 )
 
 const (
@@ -36,6 +37,7 @@ func New(logLevel loglite.Level) (*Io4edgeManager, error) {
 		quit:   make(chan struct{}),
 	}
 	m.deviceState = make(map[string]*io4edgeDevice)
+	m.cleanUpdateFiles()
 	go m.loop()
 	return m, nil
 }
@@ -168,4 +170,11 @@ func tweakNameFromManifest(name string) string {
 		return "fw-" + name
 	}
 	return name
+}
+
+func (m *Io4edgeManager) cleanUpdateFiles() {
+	err := updatestore.Clean(m.logger, "io4edge-*", []string{})
+	if err != nil {
+		m.logger.Errorf("Failed to clean io4edge update files: %v", err)
+	}
 }

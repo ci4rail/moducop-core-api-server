@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -21,6 +22,9 @@ const (
 	defaultFirmwareName = "fw-iou16-00-default"
 	defaultVersion      = "1.0.0"
 	devicePrefix        = "S100-IUO16-USB-EXT1"
+	restartDowntime     = 10 * time.Second
+	stateLockTimeout    = 5 * time.Second
+	stateLockRetry      = 10 * time.Millisecond
 )
 
 var deviceIDs = []string{
@@ -40,7 +44,8 @@ var serialByDevice = map[string]string{
 }
 
 type State struct {
-	FirmwareByDevice map[string]string `json:"firmware_by_device"`
+	FirmwareByDevice         map[string]string    `json:"firmware_by_device"`
+	UnavailableUntilByDevice map[string]time.Time `json:"unavailable_until_by_device"`
 }
 
 func DeviceIDs() []string {
@@ -51,6 +56,10 @@ func DeviceIDs() []string {
 
 func FirmwareName() string {
 	return defaultFirmwareName
+}
+
+func RestartDowntime() time.Duration {
+	return restartDowntime
 }
 
 func StateDir() string {
@@ -65,6 +74,32 @@ func StatePath() string {
 }
 
 func LoadState() (State, error) {
+	return loadStateUnlocked()
+}
+
+func UpdateState(update func(*State) error) (State, error) {
+	var updated State
+	err := withStateLock(func() error {
+		s, err := loadStateUnlocked()
+		if err != nil {
+			return err
+		}
+		if err := update(&s); err != nil {
+			return err
+		}
+		if err := saveStateUnlocked(s); err != nil {
+			return err
+		}
+		updated = s
+		return nil
+	})
+	if err != nil {
+		return State{}, err
+	}
+	return updated, nil
+}
+
+func loadStateUnlocked() (State, error) {
 	p := StatePath()
 	b, err := os.ReadFile(p)
 	if err != nil {
@@ -87,6 +122,10 @@ func LoadState() (State, error) {
 }
 
 func SaveState(s State) error {
+	return saveStateUnlocked(s)
+}
+
+func saveStateUnlocked(s State) error {
 	if err := os.MkdirAll(StateDir(), 0o755); err != nil {
 		return err
 	}
@@ -95,10 +134,31 @@ func SaveState(s State) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(StatePath(), b, 0o600)
+	tmp, err := os.CreateTemp(StateDir(), stateFileName+".tmp.*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(b); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, StatePath()); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 func ResolveDeviceID(input string) (string, bool) {
+	if deviceID, ok := deviceIDFromIP(strings.TrimSuffix(input, ":9999")); ok {
+		return deviceID, true
+	}
 	for _, id := range deviceIDs {
 		if id == input {
 			return id, true
@@ -141,16 +201,68 @@ func defaultState() State {
 	for _, id := range deviceIDs {
 		fw[id] = defaultVersion
 	}
-	return State{FirmwareByDevice: fw}
+	return State{
+		FirmwareByDevice:         fw,
+		UnavailableUntilByDevice: make(map[string]time.Time, len(deviceIDs)),
+	}
 }
 
 func normalize(s *State) {
 	if s.FirmwareByDevice == nil {
 		s.FirmwareByDevice = make(map[string]string, len(deviceIDs))
 	}
+	if s.UnavailableUntilByDevice == nil {
+		s.UnavailableUntilByDevice = make(map[string]time.Time, len(deviceIDs))
+	}
 	for _, id := range deviceIDs {
 		if s.FirmwareByDevice[id] == "" {
 			s.FirmwareByDevice[id] = defaultVersion
 		}
+	}
+	now := time.Now()
+	for deviceID, until := range s.UnavailableUntilByDevice {
+		if !now.Before(until) {
+			delete(s.UnavailableUntilByDevice, deviceID)
+		}
+	}
+}
+
+func (s State) IsAvailable(deviceID string, now time.Time) bool {
+	until, ok := s.UnavailableUntilByDevice[deviceID]
+	return !ok || !now.Before(until)
+}
+
+func deviceIDFromIP(input string) (string, bool) {
+	for _, id := range deviceIDs {
+		ip, ok := DeviceIP(id)
+		if ok && ip == input {
+			return id, true
+		}
+	}
+	return "", false
+}
+
+func withStateLock(fn func() error) error {
+	if err := os.MkdirAll(StateDir(), 0o755); err != nil {
+		return err
+	}
+	lockPath := StatePath() + ".lock"
+	deadline := time.Now().Add(stateLockTimeout)
+	for {
+		lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err == nil {
+			_ = lockFile.Close()
+			defer func() {
+				_ = os.Remove(lockPath)
+			}()
+			return fn()
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return err
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout acquiring state lock: %s", lockPath)
+		}
+		time.Sleep(stateLockRetry)
 	}
 }
