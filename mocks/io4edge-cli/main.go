@@ -115,6 +115,9 @@ func runFw(deviceID string) error {
 	if err != nil {
 		return err
 	}
+	if err := ensureDeviceAvailable(st, deviceID); err != nil {
+		return err
+	}
 	version := st.FirmwareByDevice[deviceID]
 	if version == "" {
 		version = "1.0.0"
@@ -124,6 +127,13 @@ func runFw(deviceID string) error {
 }
 
 func runHW(deviceID string) error {
+	st, err := mockio4edge.LoadState()
+	if err != nil {
+		return err
+	}
+	if err := ensureDeviceAvailable(st, deviceID); err != nil {
+		return err
+	}
 	serial, ok := mockio4edge.DeviceSerial(deviceID)
 	if !ok {
 		return fmt.Errorf("unknown device id: %s", deviceID)
@@ -133,8 +143,15 @@ func runHW(deviceID string) error {
 }
 
 func runScan() error {
+	st, err := mockio4edge.LoadState()
+	if err != nil {
+		return err
+	}
 	fmt.Println("DEVICE ID               IP              HARDWARE        SERIAL")
 	for _, id := range mockio4edge.DeviceIDs() {
+		if !st.IsAvailable(id, time.Now()) {
+			continue
+		}
 		ip, ok := mockio4edge.DeviceIP(id)
 		if !ok {
 			return fmt.Errorf("missing IP for device %s", id)
@@ -149,6 +166,14 @@ func runScan() error {
 }
 
 func runLoadFirmware(deviceID, firmwarePath string) error {
+	st, err := mockio4edge.LoadState()
+	if err != nil {
+		return err
+	}
+	if err := ensureDeviceAvailable(st, deviceID); err != nil {
+		return err
+	}
+
 	manifest, err := loadFirmwareManifest(firmwarePath)
 	if err != nil {
 		return err
@@ -164,18 +189,26 @@ func runLoadFirmware(deviceID, firmwarePath string) error {
 		time.Sleep(1 * time.Second)
 	}
 
-	st, err := mockio4edge.LoadState()
+	st, err = mockio4edge.UpdateState(func(st *mockio4edge.State) error {
+		st.FirmwareByDevice[deviceID] = version
+		st.UnavailableUntilByDevice[deviceID] = time.Now().Add(mockio4edge.RestartDowntime())
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	st.FirmwareByDevice[deviceID] = version
-	if err := mockio4edge.SaveState(st); err != nil {
-		return err
-	}
+	time.Sleep(time.Until(st.UnavailableUntilByDevice[deviceID]))
 
 	fmt.Println("Reconnecting to restarted device.")
 	fmt.Printf("Firmware name: %s, Version %s\n", mockio4edge.FirmwareName(), version)
 	return nil
+}
+
+func ensureDeviceAvailable(st mockio4edge.State, deviceID string) error {
+	if st.IsAvailable(deviceID, time.Now()) {
+		return nil
+	}
+	return fmt.Errorf("device %s is temporarily unavailable", deviceID)
 }
 
 func loadFirmwareManifest(firmwarePath string) (firmwareManifest, error) {
