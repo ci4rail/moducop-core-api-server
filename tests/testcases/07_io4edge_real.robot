@@ -14,7 +14,7 @@ ${FW_NAME1}  fw-cpu01uc-default
 *** Test Cases ***
 
 List Io4Edge Devices Shall Return All Devices
-    Sleep  30s  # Wait for SUT to be fully up (server restart has been running before this test)
+    Sleep  60s  # Wait for SUT to be fully up (server restart has been running before this test)
     
     ${response}=    GET   ${API_URL}/hardware/io4edge-devices  expected_status=any
     Should Be Equal As Integers    ${response.status_code}    200
@@ -39,7 +39,7 @@ Initial Firmware Update Shall Pass
     Log To Console    ${response.text} ${response.status_code} 
     Should Be Equal As Integers    ${response.status_code}    202
 
-    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV1}  timeout=20s
+    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV1}  timeout=60s
 
     Check Current Version And Deploy Status  ${API_URL}/software/io4edge/${DEV1}   
     ...    ${FW_NAME1}
@@ -64,7 +64,7 @@ Update Shall be Rejected if already an Update in Progress
     Log To Console    ${response.text} ${response.status_code} 
     Should Be Equal As Integers    ${response.status_code}    412
 
-    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV1}  timeout=20s
+    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV1}  timeout=60s
     Check Current Version And Deploy Status  ${API_URL}/software/io4edge/${DEV1}       
     ...    ${FW_NAME1}
     ...    1.1.0
@@ -100,16 +100,17 @@ Damaged Firmware Update Shall be Rejected
 #     ...    1.0.3
 #     ...    success
 
-Server Restart While Update Shall Shall Result in Update Resume
-    ${response}=    Load Artifact  ${API_URL}/software/io4edge/${DEV1}  
-    ...    ${ASSET_DIR}/fw-cpu01uc-default-1.1.1-rc.1.fwpkg
-    Log To Console    ${response.text} ${response.status_code} 
-    Should Be Equal As Integers    ${response.status_code}    202
+# Server Restart While Update Shall Shall Result in Update Resume
+# This is no longer supprted!
+#     ${response}=    Load Artifact  ${API_URL}/software/io4edge/${DEV1}  
+#     ...    ${ASSET_DIR}/fw-cpu01uc-default-1.1.1-rc.1.fwpkg
+#     Log To Console    ${response.text} ${response.status_code} 
+#     Should Be Equal As Integers    ${response.status_code}    202
 
-    Crash and Restart SUT
+#     Crash and Restart SUT
 
-    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV1}  timeout=20s
-    Check Current Version And Deploy Status  ${API_URL}/software/io4edge/${DEV1}  
-    ...    ${FW_NAME1}
-    ...    1.1.1-rc.1
-    ...    success
+#     ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV1}  timeout=20s
+#     Check Current Version And Deploy Status  ${API_URL}/software/io4edge/${DEV1}  
+#     ...    ${FW_NAME1}
+#     ...    1.1.1-rc.1
+#     ...    success

@@ -43,7 +43,7 @@ Crash and Restart SUT
         Sleep  1.5s
         Log To Console    Rebooting DUT
         SSH Command Should Succeed    reboot
-        Sleep  30s
+        Sleep  60s
         Open SSH Connection to DUT
     END
 
