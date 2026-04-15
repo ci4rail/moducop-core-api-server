@@ -29,10 +29,10 @@ sshpass -p "$pass" ssh $ssh_opts "root@$dut_ip" \
 
 sleep 40
 sshpass -p "$pass" ssh $ssh_opts "root@$dut_ip" "mender-update commit"
-sshpass -p "$pass" ssh $ssh_opts "root@$dut_ip" "rm -f /root/core-api-server; systemctl stop core-api-server.service"
+sshpass -p "$pass" ssh $ssh_opts "root@$dut_ip" "rm -f /etc/core-api-server; systemctl stop core-api-server.service"
 GOOS=linux GOARCH=arm64 go build -o ../bin/core-api-server-arm64 ../cmd/api-server/main.go 
-sshpass -p "$pass" scp $scp_opts ../bin/core-api-server-arm64 "root@$dut_ip:/root/core-api-server"
-sshpass -p "$pass" scp $scp_opts ../deploy/core-api-server.service "root@$dut_ip:/etc/systemd/system/core-api-server.service"
+sshpass -p "$pass" scp $scp_opts ../bin/core-api-server-arm64 "root@$dut_ip:/etc/core-api-server"
+sshpass -p "$pass" scp $scp_opts ../deploy/overlay-etc/upper/systemd/system/multi-user.target.wants/core-api-server.service "root@$dut_ip:/etc/systemd/system/core-api-server.service"
 
 cpu01ucfw=assets/fw-cpu01uc-default-1.1.0.fwpkg
 
