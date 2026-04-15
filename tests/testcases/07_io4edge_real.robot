@@ -14,6 +14,8 @@ ${FW_NAME1}  fw-cpu01uc-default
 *** Test Cases ***
 
 List Io4Edge Devices Shall Return All Devices
+    Sleep  30s  # Wait for SUT to be fully up (server restart has been running before this test)
+    
     ${response}=    GET   ${API_URL}/hardware/io4edge-devices  expected_status=any
     Should Be Equal As Integers    ${response.status_code}    200
     Log To Console   ${response.json()} ${response.status_code}
@@ -23,7 +25,7 @@ List Io4Edge Devices Shall Return All Devices
 
     FOR    ${dev}    IN    @{expected_devices}
         Should Contain    ${response.json()}    ${dev}
-        END    
+    END    
 
 
 Original Firmware Shall be Reported

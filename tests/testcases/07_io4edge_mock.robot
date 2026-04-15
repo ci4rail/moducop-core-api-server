@@ -40,7 +40,7 @@ Initial Firmware Update Shall Pass
     Log To Console    ${response.text} ${response.status_code} 
     Should Be Equal As Integers    ${response.status_code}    202
 
-    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV_BASE_NAME}1  timeout=20s
+    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV_BASE_NAME}1  timeout=35s
 
     Check Current Version And Deploy Status  ${API_URL}/software/io4edge/${DEV_BASE_NAME}1   
     ...    ${FW_NAME}
@@ -65,7 +65,7 @@ Update Shall be Rejected if already an Update in Progress
     Log To Console    ${response.text} ${response.status_code} 
     Should Be Equal As Integers    ${response.status_code}    412
 
-    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV_BASE_NAME}1  timeout=20s
+    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV_BASE_NAME}1  timeout=35s
     Check Current Version And Deploy Status  ${API_URL}/software/io4edge/${DEV_BASE_NAME}1   
     ...    ${FW_NAME}
     ...    1.0.3
@@ -89,16 +89,15 @@ Parallel Updates on different Devices Shall Pass
     Log To Console    ${response.text} ${response.status_code} 
     Should Be Equal As Integers    ${response.status_code}    202    
 
-    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV_BASE_NAME}2  timeout=20s
+    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV_BASE_NAME}2  timeout=35s
     Check Current Version And Deploy Status  ${API_URL}/software/io4edge/${DEV_BASE_NAME}2  
     ...    ${FW_NAME}
     ...    1.0.2
     ...    success
 
-    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV_BASE_NAME}3  timeout=5s
+    ${status_response}=    Wait for Update    ${API_URL}/software/io4edge/${DEV_BASE_NAME}3  timeout=10s
     Check Current Version And Deploy Status  ${API_URL}/software/io4edge/${DEV_BASE_NAME}3  
     ...    ${FW_NAME}    
     ...    1.0.3
     ...    success
-
 

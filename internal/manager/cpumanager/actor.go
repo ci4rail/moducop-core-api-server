@@ -329,8 +329,8 @@ func (m *CPUManager) saveState() {
 }
 
 func (m *CPUManager) cleanUpdateFiles() {
-	excludes := []string {};
-	if 	m.state.MenderState.CurrentArtifact != "" {
+	excludes := []string{}
+	if m.state.MenderState.CurrentArtifact != "" {
 		excludes = append(excludes, m.state.MenderState.CurrentArtifact)
 	}
 	for _, e := range m.state.Entities {

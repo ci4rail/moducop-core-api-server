@@ -23,7 +23,10 @@ const (
 	apiPrefix                   = "/api/v1"
 	readHeaderTO                = 5 * time.Second
 	readTO                      = 300 * time.Second
-	writeTO                     = 30 * time.Second
+	// PUT update endpoints read the full artifact before they can return a response.
+	// Keep the write timeout above the upload read budget so slow real-target uploads
+	// can still complete and return a proper JSON error/status response.
+	writeTO                     = readTO + 30*time.Second
 	idleTO                      = 60 * time.Second
 	errUnknown                  = "api-0000"
 	errCodeBadRequest           = "api-0001"

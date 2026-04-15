@@ -6,7 +6,14 @@
 
 package io4edgemanager
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
+
+const (
+	removeTimeout = 1 * time.Minute
+)
 
 type io4edgeDevice struct {
 	Name         string // device name as reported by io4edge-cli
@@ -14,6 +21,7 @@ type io4edgeDevice struct {
 	FwPackage    string      // "" if no update is in progress
 	DeployingNV  NameVersion // the version that is being deployed, empty if no deployment in progress
 	CurrentNV    NameVersion // the currently installed firmware version
+	LastSeen     time.Time   // last time the device was seen during a scan or reacted to a command
 }
 
 func (m *Io4edgeManager) scanAndUpdateDeviceStates() {
@@ -40,8 +48,12 @@ func (m *Io4edgeManager) scanAndUpdateDeviceStates() {
 func (m *Io4edgeManager) updateDeviceState(deviceName string) error {
 	currentNV := m.firmwareVersionFromDevice(deviceName)
 	if currentNV.Name == "" && currentNV.Version == "" {
-		// remove device from state
-		delete(m.deviceState, deviceName)
+		dev, ok := m.deviceState[deviceName]
+		if ok && time.Since(dev.LastSeen) > removeTimeout {
+			// remove device from state
+			delete(m.deviceState, deviceName)
+			m.logger.Infof("Removing device %s from state since it is no longer present and last seen was more than %v ago", deviceName, removeTimeout)
+		}
 		return fmt.Errorf("failed to get firmware version for device %s", deviceName)
 	}
 	var dev *io4edgeDevice
@@ -54,6 +66,7 @@ func (m *Io4edgeManager) updateDeviceState(deviceName string) error {
 		m.deviceState[deviceName] = dev
 	}
 	dev.CurrentNV = currentNV
+	dev.LastSeen = time.Now()
 	return nil
 }
 
