@@ -67,6 +67,25 @@ S100-IUO16-USB-EXT1-UC1 192.168.200.1   s100-iou16      b4e31793-f660-4e2e-af20-
 	}
 }
 
+func TestRetryFirmwareVersion(t *testing.T) {
+	expected := NameVersion{Name: "fw-iou16-00-default", Version: "1.0.3"}
+	responses := []NameVersion{{}, expected}
+	readCalls := 0
+
+	got := retryFirmwareVersion(func() NameVersion {
+		current := responses[readCalls]
+		readCalls++
+		return current
+	}, expected, 3, 0)
+
+	if got != expected {
+		t.Fatalf("retryFirmwareVersion() = %+v, want %+v", got, expected)
+	}
+	if readCalls != 2 {
+		t.Fatalf("read function called %d times, want 2", readCalls)
+	}
+}
+
 func TestParseFirmwareVersion(t *testing.T) {
 	t.Parallel()
 

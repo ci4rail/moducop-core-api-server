@@ -79,7 +79,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  mender-update commit")
 	fmt.Fprintln(os.Stderr, "  mender-update rollback")
 	fmt.Fprintln(os.Stderr, "  mender-update show-issue")
-	fmt.Fprintln(os.Stderr, "  mender-update err-inject <none|after-stop-old-containers|after-renaming-old-application-directory|after-extracting-new-application-before-starting-new-containers>")
+	fmt.Fprintln(os.Stderr, "  mender-update err-inject <none|after-stop-old-containers|after-renaming-old-application-directory|after-extracting-new-application-before-starting-new-containers|docker-compose-up-failed>")
 }
 
 func runInstall(_ context.Context, imagePath string) error {
@@ -245,6 +245,17 @@ func installApp(st *mockmender.State, imagePath string, metadata mockmender.AppM
 		fmt.Println("record_id=1 severity=error time=\"2026-Mar-03 07:43:32.990506\" name=\"Global\" msg=\"Unsupported payload type\"")
 		fmt.Println("Installation failed. System not modified.")
 		return fmt.Errorf("unsupported payload")
+	}
+	if st.ErrorInjectPoint == mockmender.ErrInjectDockerComposeUpFailed {
+		// docker compose down has already stopped the old rollout. Preserve that
+		// side effect even though the subsequent compose up fails.
+		if err := mockmender.SaveState(*st); err != nil {
+			return err
+		}
+		fmt.Println("Error response from daemon: invalid mount config for type \"bind\": bind source path does not exist: /data/missing-bind-source")
+		fmt.Println("unsuccessful rollout")
+		fmt.Println("Installation failed, and Update Module does not support rollback. System may be in an inconsistent state.")
+		return errors.New("docker compose up failed because bind source path does not exist")
 	}
 	if err := maybeInjectedFailure(st, mockmender.ErrInjectAfterExtractBeforeStart); err != nil {
 		return err

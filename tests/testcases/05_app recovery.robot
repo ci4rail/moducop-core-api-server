@@ -4,6 +4,7 @@
 
 *** Settings ***
 Resource     common.resource
+
 Test Tags  mender  application
 
 *** Variables ***
@@ -31,3 +32,26 @@ Reboot during application update shall recover and complete update
     ...   a895c3c
     Check Deploy Status from Response   ${status_response}   success   Update deployed successfully
 
+Persistent docker compose failure shall stop after bounded recovery retries
+
+    ${result}=    Run Process   mender-update   err-inject   docker-compose-up-failed
+    Should Be Equal As Integers    ${result.rc}    0
+
+    ${response}=    Load Artifact  ${API_URL}/software/application/${APP_NAME}  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
+    Should Be Equal As Integers    ${response.status_code}    202
+
+    ${status_response}=    Wait for Update    ${API_URL}/software/application/${APP_NAME}  timeout=60s
+    Check Deploy Status from Response   ${status_response}   failure
+
+    ${result}=  Run Docker PS WithLabels
+    Should Not Contain  ${result.stdout}    nginx-demo-web-1
+
+    Clear Error Injection
+
+*** Keywords ***
+Run Docker PS WithLabels
+    ${result}=    Run Process    docker  ps   --format  {{.Names}}\\t{{.Labels}}
+    Log To Console    ${result.stderr}
+    Log To Console    ${result.stdout}
+
+    RETURN    ${result}

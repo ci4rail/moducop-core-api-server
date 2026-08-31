@@ -65,6 +65,7 @@ const (
 	ErrInjectAfterStopOldContainers  = "after-stop-old-containers"
 	ErrInjectAfterRenameOldAppDir    = "after-renaming-old-application-directory"
 	ErrInjectAfterExtractBeforeStart = "after-extracting-new-application-before-starting-new-containers"
+	ErrInjectDockerComposeUpFailed   = "docker-compose-up-failed"
 )
 
 func StateDir() string {
@@ -360,7 +361,7 @@ func Stage() (idle, installed, trial string) {
 
 func IsValidErrInjectPoint(v string) bool {
 	switch v {
-	case ErrInjectNone, ErrInjectAfterStopOldContainers, ErrInjectAfterRenameOldAppDir, ErrInjectAfterExtractBeforeStart:
+	case ErrInjectNone, ErrInjectAfterStopOldContainers, ErrInjectAfterRenameOldAppDir, ErrInjectAfterExtractBeforeStart, ErrInjectDockerComposeUpFailed:
 		return true
 	default:
 		return false
