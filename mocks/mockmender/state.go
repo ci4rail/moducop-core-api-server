@@ -28,23 +28,34 @@ const (
 const defaultIssueContent = "TDX Wayland with XWayland 7.1.0-devel-20260210154127+build.0 (scarthgap) \\n \\l\nModucop-CPU01_Standard-Image_v2.7.0.40ee657.20260218.1208\n"
 
 type State struct {
-	ActiveRootfs       string           `json:"active_rootfs"`
-	OldRootfs          string           `json:"old_rootfs"`
-	NewRootfs          string           `json:"new_rootfs"`
-	ActiveIssuePath    string           `json:"active_issue_path"`
-	OldIssuePath       string           `json:"old_issue_path"`
-	PendingImage       string           `json:"pending_image"`
-	PendingExt4Image   string           `json:"pending_ext4_image"`
-	PendingIssuePath   string           `json:"pending_issue_path"`
-	PendingUpdateType  string           `json:"pending_update_type"`
-	PendingAppProject  string           `json:"pending_app_project"`
-	PreviousAppProject string           `json:"previous_app_project"`
-	Stage              string           `json:"stage"`
-	CommittedRootfs    string           `json:"committed_rootfs"`
-	CommittedIssuePath string           `json:"committed_issue_path"`
-	RunningContainers  []ContainerState `json:"running_containers"`
-	ErrorInjectPoint   string           `json:"error_inject_point"`
-	InconsistentApp    string           `json:"inconsistent_app"`
+	ActiveRootfs                    string           `json:"active_rootfs"`
+	OldRootfs                       string           `json:"old_rootfs"`
+	NewRootfs                       string           `json:"new_rootfs"`
+	ActiveIssuePath                 string           `json:"active_issue_path"`
+	OldIssuePath                    string           `json:"old_issue_path"`
+	PendingImage                    string           `json:"pending_image"`
+	PendingExt4Image                string           `json:"pending_ext4_image"`
+	PendingIssuePath                string           `json:"pending_issue_path"`
+	PendingUpdateType               string           `json:"pending_update_type"`
+	PendingCustomizationVersion     string           `json:"pending_customization_version"`
+	ActiveCustomizationSlot         string           `json:"active_customization_slot"`
+	LastGoodCustomizationSlot       string           `json:"last_good_customization_slot"`
+	CandidateCustomizationSlot      string           `json:"candidate_customization_slot"`
+	CandidateCustomizationVersion   string           `json:"candidate_customization_version"`
+	CustomizationCandidateState     string           `json:"customization_candidate_state"`
+	CustomizationCandidateAttempts  int              `json:"customization_candidate_attempts"`
+	CustomizationHealthExpectedPass bool             `json:"customization_health_expected_pass"`
+	CustomizationHealthEvaluated    bool             `json:"customization_health_evaluated"`
+	CustomizationHealthPassed       bool             `json:"customization_health_passed"`
+	ActiveCustomizationVersion      string           `json:"active_customization_version"`
+	PendingAppProject               string           `json:"pending_app_project"`
+	PreviousAppProject              string           `json:"previous_app_project"`
+	Stage                           string           `json:"stage"`
+	CommittedRootfs                 string           `json:"committed_rootfs"`
+	CommittedIssuePath              string           `json:"committed_issue_path"`
+	RunningContainers               []ContainerState `json:"running_containers"`
+	ErrorInjectPoint                string           `json:"error_inject_point"`
+	InconsistentApp                 string           `json:"inconsistent_app"`
 }
 
 type ContainerState struct {
@@ -55,9 +66,10 @@ type ContainerState struct {
 type UpdateType string
 
 const (
-	UpdateTypeNone   UpdateType = ""
-	UpdateTypeRootfs UpdateType = "rootfs-image"
-	UpdateTypeApp    UpdateType = "app"
+	UpdateTypeNone          UpdateType = ""
+	UpdateTypeRootfs        UpdateType = "rootfs-image"
+	UpdateTypeApp           UpdateType = "app"
+	UpdateTypeCustomization UpdateType = "os-customization"
 )
 
 const (
@@ -155,6 +167,65 @@ func SetInstalledApp(s *State, imageName, pendingProject, previousProject string
 	s.Stage = stageInstalled
 }
 
+func SetInstalledCustomization(s *State, imageName, version string, healthExpectedPass bool) {
+	s.PendingImage = imageName
+	s.PendingUpdateType = string(UpdateTypeCustomization)
+	s.PendingCustomizationVersion = version
+	if s.ActiveCustomizationSlot == "A" {
+		s.CandidateCustomizationSlot = "B"
+	} else {
+		s.CandidateCustomizationSlot = "A"
+	}
+	s.CandidateCustomizationVersion = version
+	s.CustomizationCandidateState = "pending"
+	s.CustomizationCandidateAttempts = 0
+	s.CustomizationHealthExpectedPass = healthExpectedPass
+	s.CustomizationHealthEvaluated = false
+	s.CustomizationHealthPassed = false
+	s.Stage = stageInstalled
+}
+
+func EvaluateCustomizationHealth(s *State, passed bool) {
+	s.CustomizationHealthEvaluated = true
+	s.CustomizationHealthPassed = passed
+	s.CustomizationCandidateAttempts++
+	if passed {
+		s.ActiveCustomizationVersion = s.PendingCustomizationVersion
+		s.ActiveCustomizationSlot = s.CandidateCustomizationSlot
+		s.LastGoodCustomizationSlot = s.CandidateCustomizationSlot
+		s.CandidateCustomizationSlot = ""
+		s.CandidateCustomizationVersion = ""
+		s.CustomizationCandidateState = ""
+		return
+	}
+	s.CandidateCustomizationSlot = ""
+	s.CandidateCustomizationVersion = ""
+	s.CustomizationCandidateState = "rolled-back"
+}
+
+func CommitCustomization(s *State) {
+	clearCustomizationMenderTransaction(s)
+}
+
+func RollbackCustomization(s *State) {
+	if s.CustomizationCandidateState == "pending" {
+		s.CandidateCustomizationSlot = ""
+		s.CandidateCustomizationVersion = ""
+		s.CustomizationCandidateState = "rolled-back"
+	}
+	clearCustomizationMenderTransaction(s)
+}
+
+func clearCustomizationMenderTransaction(s *State) {
+	s.PendingImage = ""
+	s.PendingUpdateType = string(UpdateTypeNone)
+	s.PendingCustomizationVersion = ""
+	s.CustomizationHealthExpectedPass = false
+	s.CustomizationHealthEvaluated = false
+	s.CustomizationHealthPassed = false
+	s.Stage = stageIdle
+}
+
 func TrialBoot(s *State) {
 	// First reboot after install: boot into new rootfs, but still uncommitted.
 	s.ActiveRootfs = s.NewRootfs
@@ -180,6 +251,9 @@ func RollbackAfterFailedTrial(s *State) {
 		}
 	case UpdateTypeApp:
 		RestorePreviousApp(s)
+	case UpdateTypeCustomization:
+		RollbackCustomization(s)
+		return
 	}
 	clearPendingUpdate(s)
 }
@@ -193,6 +267,9 @@ func RollbackImmediate(s *State) {
 		}
 	case UpdateTypeApp:
 		RestorePreviousApp(s)
+	case UpdateTypeCustomization:
+		RollbackCustomization(s)
+		return
 	}
 	clearPendingUpdate(s)
 }
@@ -223,6 +300,10 @@ func clearPendingUpdate(s *State) {
 	s.PendingExt4Image = ""
 	s.PendingIssuePath = ""
 	s.PendingUpdateType = string(UpdateTypeNone)
+	s.PendingCustomizationVersion = ""
+	s.CustomizationHealthExpectedPass = false
+	s.CustomizationHealthEvaluated = false
+	s.CustomizationHealthPassed = false
 	s.PendingAppProject = ""
 	s.PreviousAppProject = ""
 	s.Stage = stageIdle

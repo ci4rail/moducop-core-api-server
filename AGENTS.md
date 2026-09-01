@@ -10,6 +10,7 @@ moducop-core-api-server is a REST API Server that abstracts management functions
 
 Functionality:
 - Linux Rootfs Update via mender https://docs.mender.io/
+- Core OS Customization Update via mender
 - Application Update via mender-artifact and docker compose
 - Secondary device updates for io4edge devices: https://docs.ci4rail.com/user-docs/io4edge/ 
 - Reboot

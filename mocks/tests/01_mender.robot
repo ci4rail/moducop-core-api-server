@@ -140,6 +140,47 @@ Application Error Inject After Stop Old Containers
     Should Be Equal As Integers    ${result.rc}    0
     Should Contain    ${result.stdout}    Installed and committed.
 
+Core OS Customization Status Shall Reflect Health Check Result
+    ${result}=    Run Process    os-customization-set    status
+    Should Be Equal As Integers    ${result.rc}    0
+    Should Contain    ${result.stdout}    "active_version":null
+    Should Contain    ${result.stdout}    "candidate_state":null
+
+    ${good_artifact}=    Set Variable    ${STATE_DIR}/customization-good.mender
+    Create Customization Artifact    ${good_artifact}    site-good-1.0.0    true
+    ${result}=    Run Process    mender-update    install    ${good_artifact}
+    Should Be Equal As Integers    ${result.rc}    0
+
+    ${result}=    Run Process    os-customization-set    status
+    Should Be Equal As Integers    ${result.rc}    0
+    Should Contain    ${result.stdout}    "candidate_version":"site-good-1.0.0"
+    Should Contain    ${result.stdout}    "candidate_state":"pending"
+
+    ${result}=    Run Process    reboot
+    Should Be Equal As Integers    ${result.rc}    0
+    Should Contain    ${result.stdout}    Core OS Customization health checks passed.
+    ${result}=    Run Process    os-customization-set    status
+    Should Contain    ${result.stdout}    "active_version":"site-good-1.0.0"
+    Should Contain    ${result.stdout}    "last_good_version":"site-good-1.0.0"
+    Should Contain    ${result.stdout}    "candidate_state":null
+
+    ${result}=    Run Process    mender-update    commit
+    Should Be Equal As Integers    ${result.rc}    0
+
+    ${failed_artifact}=    Set Variable    ${STATE_DIR}/customization-failed.mender
+    Create Customization Artifact    ${failed_artifact}    site-failed-1.0.0    false
+    ${result}=    Run Process    mender-update    install    ${failed_artifact}
+    Should Be Equal As Integers    ${result.rc}    0
+    ${result}=    Run Process    reboot
+    Should Be Equal As Integers    ${result.rc}    0
+    Should Contain    ${result.stdout}    Core OS Customization health checks failed.
+    ${result}=    Run Process    os-customization-set    status
+    Should Contain    ${result.stdout}    "active_version":"site-good-1.0.0"
+    Should Contain    ${result.stdout}    "candidate_state":"rolled-back"
+
+    ${result}=    Run Process    mender-update    rollback
+    Should Be Equal As Integers    ${result.rc}    0
+
 
 *** Keywords ***
 Setup Environment
@@ -162,4 +203,21 @@ Run Docker PS WithLabels
 
 Clear Error Injection
     ${result}=    Run Process   mender-update   err-inject   \
+    Should Be Equal As Integers    ${result.rc}    0
+
+Create Customization Artifact
+    [Arguments]    ${artifact}    ${version}    ${health_command}
+    ${work_dir}=    Set Variable    ${STATE_DIR}/customization-artifact-${version}
+    ${header_dir}=    Set Variable    ${work_dir}/header
+    ${payload_dir}=    Set Variable    ${work_dir}/payload
+    Create Directory    ${header_dir}
+    Create Directory    ${payload_dir}
+    Create Directory    ${work_dir}/data
+    Create File    ${header_dir}/header-info    {"payloads":[{"type":"os-customization"}],"artifact_depends":{"device_type":["moducop-cpu01"]}}
+    Create File    ${payload_dir}/manifest.json    {"format_version":1,"version":"${version}","health_checks":[{"type":"command","command":["${health_command}"]}]}
+    ${result}=    Run Process    tar    -C    ${header_dir}    -cf    ${work_dir}/header.tar    header-info
+    Should Be Equal As Integers    ${result.rc}    0
+    ${result}=    Run Process    tar    -C    ${payload_dir}    -cf    ${work_dir}/data/0000.tar    manifest.json
+    Should Be Equal As Integers    ${result.rc}    0
+    ${result}=    Run Process    tar    -C    ${work_dir}    -cf    ${artifact}    header.tar    data/0000.tar
     Should Be Equal As Integers    ${result.rc}    0
