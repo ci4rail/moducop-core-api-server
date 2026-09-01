@@ -199,6 +199,7 @@ It shall be possible to inject errors into the mender-update command via an err-
 * after stopping old containers, mender-update shall exit
 * after renaming old application directory, mender-update shall exit
 * after extracting new application, but before starting new containers, mender-update shall exit
+* docker-compose-up-failed shall simulate a persistent `docker compose up` failure caused by a nonexistent bind-mount source
 
 If environment variable `MOCK_MENDER_KILL_PARENT` is set to `yes`, hitting an injected error shall additionally kill the parent process.
 

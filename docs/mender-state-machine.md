@@ -4,42 +4,61 @@ SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
 SPDX-License-Identifier: Apache-2.0
 -->
 
+## Normal update flow
+
 ```mermaid
 stateDiagram-v2
+    direction LR
+
     [*] --> Idle
+    Idle --> Installing: start update
 
-    Idle --> Installing: StartUpdateJob / state idle
+    Installing --> Rebooting: CoreOS installed
+    Installing --> Committing: application installed
+    Installing --> Idle: already committed
 
-    Installing --> Installing: Restarted\nrestart install
-    Installing --> Installing: RecoverFinished(success)\nrestart install
-    Installing --> Rebooting: InstallFinished(InstalledButNotCommitted)\nCoreOS update
-    Installing --> Committing: InstallFinished(InstalledButNotCommitted)\nApplication update
-    Installing --> Idle: InstallFinished(InstalledAndCommitted or Committed)\nemit JobFinished(success)
-    Installing --> RecoverInstallCommitting: InstallFinished(PleaseCommitOrRollback or UpdateAlreadyInProgress)\nstart recovery install
-    Installing --> RecoverInstallClearApp: InstallFinished(SystemInconsistent)\napplication update
-    Installing --> Idle: InstallFinished(SystemInconsistent)\nCoreOS update, emit JobFinished(failure)
-    Installing --> Idle: InstallFinished(SystemNotModified or RolledBack or Generic)\nemit JobFinished(failure)
+    Rebooting --> Committing: reboot succeeded
+    Rebooting --> Idle: reboot failed
 
-    Rebooting --> Rebooting: Restarted\nretry reboot
-    Rebooting --> Committing: RebootFinished(success)\nrun commit
-    Rebooting --> Idle: RebootFinished(failure)\nemit JobFinished(failure)
-
-    Committing --> Committing: Restarted\nretry commit
-    Committing --> Idle: CommitFinished(success)\nemit JobFinished(success)
-    Committing --> Idle: CommitFinished(failure)\nemit JobFinished(failure)
-
-    RecoverInstallCommitting --> RecoverInstallCommitting: Restarted\nstart recovery install
-    RecoverInstallCommitting --> Installing: CommitFinished(InstalledAndCommitted or Committed)\nemit RecoverFinished(success)
-    RecoverInstallCommitting --> RecoverInstallCommitting: CommitFinished(PleaseCommitOrRollback)\nstart recovery install again
-    RecoverInstallCommitting --> RecoverInstallClearApp: CommitFinished(SystemInconsistent)\napplication update
-    RecoverInstallCommitting --> Idle: CommitFinished(SystemInconsistent)\nCoreOS update, emit JobFinished(failure)
-    RecoverInstallCommitting --> Idle: CommitFinished(SystemNotModified or RolledBack or UpdateAlreadyInProgress or InstalledButNotCommitted or Generic)\nemit RecoverFinished(failure) -> restart install state machine emits JobFinished(failure)
-
-    RecoverInstallClearApp --> RecoverInstallClearApp: Restarted\nclear app dir again
-    RecoverInstallClearApp --> Installing: clearAppDir complete\nemit RecoverFinished(success)
-
-    note right of Idle
-      JobFinished always calls setIdle()
-      before emitting the event.
-    end note
+    Committing --> Idle: commit succeeded
+    Committing --> Idle: commit failed
 ```
+
+Every transition to `Idle` emits `JobFinished`. A successful job is emitted only
+after the appropriate install/commit step has succeeded.
+
+## Recovery and retry flow
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    Installing --> RecoverInstallCommitting: commit or rollback pending
+    RecoverInstallCommitting --> RecoverInstallCommitting: still pending
+    RecoverInstallCommitting --> Installing: recovery commit succeeded
+
+    Installing --> RecoverInstallClearApp: app state inconsistent
+    RecoverInstallCommitting --> RecoverInstallClearApp: app state inconsistent
+    RecoverInstallClearApp --> RecoverInstallClearApp: server restarted
+    RecoverInstallClearApp --> Installing: app directories cleared
+
+    Installing --> Idle: unrecoverable install failure
+    RecoverInstallCommitting --> Idle: unrecoverable recovery failure
+    RecoverInstallCommitting --> Idle: inconsistent CoreOS state
+```
+
+## Restart and retry rules
+
+| State at server restart | Action |
+| --- | --- |
+| `Installing` | Restart the interrupted install. |
+| `Rebooting` | Retry the reboot, unless the boot ID changed; then continue with commit. |
+| `Committing` | Retry commit. |
+| `RecoverInstallCommitting` | Retry the recovery commit. |
+| `RecoverInstallClearApp` | Clear the application directories again. |
+
+For an application update, one recovery-triggered re-install is permitted. The
+recovery-retry count is persistent. If another recovery would be required, the
+manager emits `JobFinished(failure)` and returns to `Idle`. This prevents a
+deterministic package error, such as a missing Docker Compose bind-mount source,
+from being retried forever.

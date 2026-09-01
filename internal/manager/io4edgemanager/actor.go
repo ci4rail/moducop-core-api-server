@@ -21,6 +21,8 @@ import (
 const (
 	inboxSize             = 10
 	updateFirmwareTimeout = 10 * time.Minute
+	firmwareVerifyRetries = 20
+	firmwareVerifyDelay   = 500 * time.Millisecond
 )
 
 type Io4edgeManager struct {
@@ -80,8 +82,10 @@ func (m *Io4edgeManager) handleCliEvent(event cliEvent) {
 	}
 	m.logger.Infof("Handling CLI event (update done on %s): %v", d.Name, event)
 	if event.Success {
-		// read back current firmware version
-		d.CurrentNV = m.firmwareVersionFromDevice(d.Name)
+		// The io4edge device can still be restarting after load-firmware has
+		// succeeded. Retry the read-back before treating an unavailable device as
+		// a failed update.
+		d.CurrentNV = m.firmwareVersionAfterUpdate(d.Name, d.DeployingNV)
 		if d.CurrentNV.Name == d.DeployingNV.Name && d.CurrentNV.Version == d.DeployingNV.Version {
 			d.DeployStatus = DeployStatus{
 				Code:    DeployStatusCodeSuccess,
@@ -101,6 +105,29 @@ func (m *Io4edgeManager) handleCliEvent(event cliEvent) {
 	}
 	d.FwPackage = ""
 	d.DeployingNV = NameVersion{}
+}
+
+func (m *Io4edgeManager) firmwareVersionAfterUpdate(deviceName string, expected NameVersion) NameVersion {
+	return retryFirmwareVersion(
+		func() NameVersion { return m.firmwareVersionFromDevice(deviceName) },
+		expected,
+		firmwareVerifyRetries,
+		firmwareVerifyDelay,
+	)
+}
+
+func retryFirmwareVersion(read func() NameVersion, expected NameVersion, attempts int, delay time.Duration) NameVersion {
+	current := NameVersion{}
+	for attempt := 0; attempt < attempts; attempt++ {
+		current = read()
+		if current == expected {
+			return current
+		}
+		if attempt+1 < attempts {
+			time.Sleep(delay)
+		}
+	}
+	return current
 }
 
 func (m *Io4edgeManager) handleUpdate(

@@ -55,6 +55,7 @@ type menderPersistentState struct {
 	CurrentArtifact   string     // "" if no update is in progress
 	CurrentEntityType entityType // valid if CurrentArtifact != ""
 	CurrentEntityName string     // valid if CurrentArtifact != ""
+	RecoveryAttempts  uint       // recovery re-installs started for the current update
 }
 
 type menderManager struct {
@@ -83,6 +84,11 @@ const (
 	rebootTimeout = 30 * time.Second
 	commitTimeout = 30 * time.Second
 	rebootDelay   = 3 * time.Second
+
+	// An application artifact cannot change while its update is in progress. A
+	// retry can recover an interrupted rollout, but retrying it indefinitely
+	// cannot fix a deterministic error such as an invalid bind mount.
+	maxApplicationRecoveryAttempts = 1
 )
 
 var (
@@ -114,6 +120,7 @@ func (m *menderManager) StartUpdateJob(entityType entityType, artifact string, e
 	m.state.CurrentArtifact = artifact
 	m.state.CurrentEntityType = entityType
 	m.state.CurrentEntityName = entityName
+	m.state.RecoveryAttempts = 0
 	m.runMenderInstallInBackGround(artifact, timeout)
 	return nil
 }
@@ -133,6 +140,18 @@ func (m *menderManager) runMenderInstallInBackGround(artifact string, timeout ti
 		m.logger.Infof("Mender install finished: %v", me)
 		m.emitEvent(me)
 	}()
+}
+
+// reserveRecoveryAttempt records a recovery-triggered application re-install.
+// The value is persistent so restarting core-api-server cannot reset the retry
+// budget after application recovery has started.
+func (m *menderManager) reserveRecoveryAttempt() bool {
+	if m.state.CurrentEntityType == entityTypeApplication &&
+		m.state.RecoveryAttempts >= maxApplicationRecoveryAttempts {
+		return false
+	}
+	m.state.RecoveryAttempts++
+	return true
 }
 
 // nolint: unparam
@@ -228,10 +247,21 @@ func (m *menderManager) handleInstallingEvent(event menderEvent) {
 		m.runMenderInstallInBackGround(m.state.CurrentArtifact, updateTimeout)
 	case menderEventRecoverFinished:
 		m.logger.Infof("Recovery install finished while installing. Restarting install")
-		m.runMenderInstallInBackGround(m.state.CurrentArtifact, updateTimeout)
+		m.runMenderRecoveryInstallInBackGround()
 	case menderEventInstallFinished:
 		m.handleInstallFinished(event.UpdateResult)
 	}
+}
+
+func (m *menderManager) runMenderRecoveryInstallInBackGround() {
+	if !m.reserveRecoveryAttempt() {
+		m.emitJobFinished(false, fmt.Sprintf(
+			"application installation failed after %d recovery retry; recovery retry limit reached",
+			maxApplicationRecoveryAttempts,
+		))
+		return
+	}
+	m.runMenderInstallInBackGround(m.state.CurrentArtifact, updateTimeout)
 }
 
 func (m *menderManager) handleInstallFinished(result menderUpdateResult) {
@@ -350,6 +380,7 @@ func (m *menderManager) setIdle() {
 	m.state.CurrentArtifact = ""
 	m.state.CurrentEntityType = entityTypeCoreOs
 	m.state.CurrentEntityName = ""
+	m.state.RecoveryAttempts = 0
 	m.state.State = menderStateIdle
 	m.saveState()
 }

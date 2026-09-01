@@ -9,6 +9,7 @@ package cpumanager
 import (
 	"bytes"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/ci4rail/moducop-core-api-server/internal/loglite"
@@ -81,6 +82,61 @@ func TestMenderUpdateResultFromInstallOutput(t *testing.T) {
 			got := manager.menderUpdateResultFromInstallOutput(tc.stdout, tc.err)
 			if got != tc.want {
 				t.Fatalf("menderUpdateResultFromInstallOutput() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestReserveRecoveryAttempt(t *testing.T) {
+	state := &menderPersistentState{CurrentEntityType: entityTypeApplication}
+	manager := &menderManager{state: state}
+
+	for attempt := uint(1); attempt <= maxApplicationRecoveryAttempts; attempt++ {
+		if !manager.reserveRecoveryAttempt() {
+			t.Fatalf("reserveRecoveryAttempt() rejected attempt %d", attempt)
+		}
+		if state.RecoveryAttempts != attempt {
+			t.Fatalf("RecoveryAttempts = %d, want %d", state.RecoveryAttempts, attempt)
+		}
+	}
+	if manager.reserveRecoveryAttempt() {
+		t.Fatal("reserveRecoveryAttempt() accepted an attempt beyond the application retry limit")
+	}
+}
+
+func TestRecoveryRetryLimitFinishesJob(t *testing.T) {
+	for _, eventCode := range []menderEventCode{menderEventRecoverFinished} {
+		t.Run(eventCode.String(), func(t *testing.T) {
+			var events []menderEvent
+			state := &menderPersistentState{
+				State:             menderStateInstalling,
+				CurrentArtifact:   "/tmp/update.mender",
+				CurrentEntityType: entityTypeApplication,
+				CurrentEntityName: "demo",
+				RecoveryAttempts:  maxApplicationRecoveryAttempts,
+			}
+			manager := &menderManager{
+				logger: loglite.New("cpumanager-test", &bytes.Buffer{}, loglite.Debug),
+				state:  state,
+				emitEvent: func(event menderEvent) {
+					events = append(events, event)
+				},
+				saveState: func() {},
+			}
+
+			manager.handleInstallingEvent(menderEvent{Code: eventCode, Success: true})
+
+			if len(events) != 1 {
+				t.Fatalf("received %d events, want 1", len(events))
+			}
+			if events[0].Code != menderEventJobFinished || events[0].Success {
+				t.Fatalf("event = %+v, want failed job finished event", events[0])
+			}
+			if !strings.Contains(events[0].Message, "retry limit reached") {
+				t.Fatalf("failure message = %q, want retry limit diagnostic", events[0].Message)
+			}
+			if state.State != menderStateIdle || state.RecoveryAttempts != 0 {
+				t.Fatalf("state after exhaustion = %+v, want idle state with reset attempts", state)
 			}
 		})
 	}
