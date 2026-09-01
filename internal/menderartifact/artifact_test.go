@@ -7,9 +7,67 @@
 package menderartifact
 
 import (
+	"archive/tar"
+	"bytes"
+	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestCoreOSCustomizationVersionFromArtifact(t *testing.T) {
+	artifact := customizationArtifact(t, "site-1.2.3", "os-customization")
+	version, err := CoreOSCustomizationVersionFromArtifact(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version != "site-1.2.3" {
+		t.Fatalf("version = %q, want site-1.2.3", version)
+	}
+}
+
+func TestCoreOSCustomizationVersionFromArtifactRejectsWrongPayload(t *testing.T) {
+	artifact := customizationArtifact(t, "site-1.2.3", "app")
+	if _, err := CoreOSCustomizationVersionFromArtifact(artifact); err == nil {
+		t.Fatal("CoreOSCustomizationVersionFromArtifact accepted an app artifact")
+	}
+}
+
+func customizationArtifact(t *testing.T, version, payloadType string) string {
+	t.Helper()
+	header := tarForTest(t, map[string]string{
+		"header-info": `{"payloads":[{"type":"` + payloadType + `"}]}`,
+	})
+	payload := tarForTest(t, map[string]string{
+		"manifest.json": `{"format_version":1,"version":"` + version + `"}`,
+	})
+	artifact := tarForTest(t, map[string]string{
+		"header.tar":    string(header),
+		"data/0000.tar": string(payload),
+	})
+	path := filepath.Join(t.TempDir(), "customization.mender")
+	if err := os.WriteFile(path, artifact, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func tarForTest(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	for name, content := range files {
+		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o600, Size: int64(len(content))}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
 
 func TestParseArtifactHeadersTypeInfo(t *testing.T) {
 	t.Parallel()

@@ -7,14 +7,21 @@
 package cpumanager
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/ci4rail/moducop-core-api-server/internal/execcli"
 	"github.com/ci4rail/moducop-core-api-server/internal/prefixfs"
 )
+
+type coreOSCustomizationStatus struct {
+	ActiveVersion *string `json:"active_version"`
+}
 
 const (
 	issueFilePath    = "/etc/issue"
@@ -99,6 +106,21 @@ func appVersionFromData(data string) (string, error) {
 		return version, nil
 	}
 	return "", fmt.Errorf("%w", errInvalidEnvDataFormat)
+}
+
+func coreOSCustomizationVersionFromTargetFS() (string, error) {
+	stdout, stderr, _, err := execcli.RunCommand("os-customization-set", 10*time.Second, "status")
+	if err != nil {
+		return "", fmt.Errorf("run os-customization-set status: %w: %s", err, stderr)
+	}
+	var status coreOSCustomizationStatus
+	if err := json.Unmarshal([]byte(stdout), &status); err != nil {
+		return "", fmt.Errorf("parse os-customization-set status: %w", err)
+	}
+	if status.ActiveVersion == nil {
+		return "", nil
+	}
+	return *status.ActiveVersion, nil
 }
 
 func listApplicationsFromTargetFS() ([]string, error) {

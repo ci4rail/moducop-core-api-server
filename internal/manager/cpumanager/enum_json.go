@@ -25,6 +25,8 @@ func (e entityType) String() string {
 		return "coreos"
 	case entityTypeApplication:
 		return "application"
+	case entityTypeCoreOSCustomization:
+		return "core-os-customization"
 	default:
 		return ""
 	}
@@ -48,6 +50,8 @@ func (e *entityType) UnmarshalJSON(data []byte) error {
 		*e = entityTypeCoreOs
 	case "application":
 		*e = entityTypeApplication
+	case "core-os-customization":
+		*e = entityTypeCoreOSCustomization
 	default:
 		return fmt.Errorf("%w: %q", errInvalidEntityTypeValue, s)
 	}
@@ -127,6 +131,10 @@ func (s menderState) String() string {
 		return "recover_install_committing"
 	case menderStateRecoverInstallClearApp:
 		return "recover_install_clear_app"
+	case menderStateVerifyingCustomization:
+		return "verifying_customization"
+	case menderStateRollingBackCustomization:
+		return "rolling_back_customization"
 	default:
 		return ""
 	}
@@ -158,6 +166,10 @@ func (s *menderState) UnmarshalJSON(data []byte) error {
 		*s = menderStateRecoverInstallCommitting
 	case "recover_install_clear_app":
 		*s = menderStateRecoverInstallClearApp
+	case "verifying_customization":
+		*s = menderStateVerifyingCustomization
+	case "rolling_back_customization":
+		*s = menderStateRollingBackCustomization
 	default:
 		return fmt.Errorf("%w: %q", errInvalidMenderState, text)
 	}

@@ -36,6 +36,9 @@ var (
 	errUnexpectedAppVersionType   = errors.New("unexpected type for app version")
 	errArtifactMissingHeaderTar   = errors.New("artifact missing header.tar(.gz)")
 	errTypeInfoNotFound           = errors.New("type-info not found")
+	errCustomizationPayloadType   = errors.New("artifact is not an os-customization payload")
+	errCustomizationManifest      = errors.New("customization payload missing manifest.json")
+	errCustomizationVersion       = errors.New("customization manifest missing version")
 )
 
 var legacyRootfsImageVersionRe = regexp.MustCompile(`^(?P<name>.+)-image(?P<suffix>-dirty)?_(?P<version>v.+?)(?:-dev)?$`)
@@ -95,6 +98,141 @@ func AppVersionFromArtifact(path string, appName string) (string, error) {
 		return "", fmt.Errorf("%w: %s.version: %T", errUnexpectedAppVersionType, appName, provides)
 	}
 	return providesStr, nil
+}
+
+// CoreOSCustomizationVersionFromArtifact validates an os-customization artifact
+// and returns the version in its manifest-only payload.
+func CoreOSCustomizationVersionFromArtifact(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	tr := tar.NewReader(f)
+	var headerTar, dataTar []byte
+	var dataTarGz bool
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", fmt.Errorf("read artifact tar: %w", err)
+		}
+		switch h.Name {
+		case "header.tar", "header.tar.gz":
+			headerTar, err = io.ReadAll(tr)
+			if err != nil {
+				return "", fmt.Errorf("read %s: %w", h.Name, err)
+			}
+			if h.Name == "header.tar.gz" {
+				gr, err := gzip.NewReader(bytes.NewReader(headerTar))
+				if err != nil {
+					return "", fmt.Errorf("open header.tar.gz: %w", err)
+				}
+				headerTar, err = io.ReadAll(gr)
+				_ = gr.Close()
+				if err != nil {
+					return "", fmt.Errorf("read header.tar.gz: %w", err)
+				}
+			}
+		case "data/0000.tar", "data/0000.tar.gz":
+			dataTar, err = io.ReadAll(tr)
+			if err != nil {
+				return "", fmt.Errorf("read %s: %w", h.Name, err)
+			}
+			dataTarGz = h.Name == "data/0000.tar.gz"
+		}
+	}
+	if !customizationPayloadType(headerTar) {
+		return "", errCustomizationPayloadType
+	}
+	if len(dataTar) == 0 {
+		return "", errors.New("artifact missing data/0000.tar(.gz)")
+	}
+	if dataTarGz {
+		gr, err := gzip.NewReader(bytes.NewReader(dataTar))
+		if err != nil {
+			return "", fmt.Errorf("open data/0000.tar.gz: %w", err)
+		}
+		dataTar, err = io.ReadAll(gr)
+		_ = gr.Close()
+		if err != nil {
+			return "", fmt.Errorf("read data/0000.tar.gz: %w", err)
+		}
+	}
+	return customizationVersionFromTar(dataTar)
+}
+
+func customizationPayloadType(headerTar []byte) bool {
+	tr := tar.NewReader(bytes.NewReader(headerTar))
+	for {
+		h, err := tr.Next()
+		if err != nil {
+			return false
+		}
+		if h.Name != "header-info" {
+			continue
+		}
+		var info struct {
+			Payloads []struct {
+				Type string `json:"type"`
+			} `json:"payloads"`
+		}
+		if err := json.NewDecoder(tr).Decode(&info); err != nil {
+			return false
+		}
+		return len(info.Payloads) == 1 && info.Payloads[0].Type == "os-customization"
+	}
+}
+
+func customizationVersionFromTar(data []byte) (string, error) {
+	tr := tar.NewReader(bytes.NewReader(data))
+	var nested []byte
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", fmt.Errorf("read customization payload: %w", err)
+		}
+		name := strings.TrimPrefix(strings.TrimPrefix(h.Name, "./"), "/")
+		if name == "manifest.json" {
+			var manifest struct {
+				Version string `json:"version"`
+			}
+			if err := json.NewDecoder(tr).Decode(&manifest); err != nil {
+				return "", fmt.Errorf("parse customization manifest: %w", err)
+			}
+			if manifest.Version == "" {
+				return "", errCustomizationVersion
+			}
+			return manifest.Version, nil
+		}
+		if h.Typeflag == tar.TypeReg && nested == nil && (strings.HasSuffix(name, ".tar") || strings.HasSuffix(name, ".tar.gz")) {
+			nested, err = io.ReadAll(tr)
+			if err != nil {
+				return "", fmt.Errorf("read nested customization payload: %w", err)
+			}
+			if strings.HasSuffix(name, ".tar.gz") {
+				gr, err := gzip.NewReader(bytes.NewReader(nested))
+				if err != nil {
+					return "", fmt.Errorf("open nested customization payload: %w", err)
+				}
+				nested, err = io.ReadAll(gr)
+				_ = gr.Close()
+				if err != nil {
+					return "", fmt.Errorf("read nested customization payload: %w", err)
+				}
+			}
+		}
+	}
+	if nested != nil {
+		return customizationVersionFromTar(nested)
+	}
+	return "", errCustomizationManifest
 }
 
 // ParseArtifactHeadersTypeInfo reads the artifact file at the given

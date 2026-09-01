@@ -18,6 +18,7 @@ type entityType int
 const (
 	entityTypeCoreOs entityType = iota
 	entityTypeApplication
+	entityTypeCoreOSCustomization
 )
 
 type entity struct {
@@ -42,6 +43,8 @@ func newEntity(name string, entityType entityType) *entity {
 		e.EntityType = entityTypeCoreOs
 	case entityTypeApplication:
 		e.EntityType = entityTypeApplication
+	case entityTypeCoreOSCustomization:
+		e.EntityType = entityTypeCoreOSCustomization
 	default:
 		return nil
 	}
@@ -133,6 +136,12 @@ func (e *entity) getDeployedVersion() (NameVersion, error) {
 			return NameVersion{}, fmt.Errorf("get version for application %s: %w", e.Name, err)
 		}
 		return NameVersion{Name: e.Name, Version: version}, nil
+	case entityTypeCoreOSCustomization:
+		version, err := coreOSCustomizationVersionFromTargetFS()
+		if err != nil {
+			return NameVersion{}, fmt.Errorf("get version for Core OS customization: %w", err)
+		}
+		return NameVersion{Name: e.Name, Version: version}, nil
 	default:
 		return NameVersion{}, fmt.Errorf("%w: %v", errUnknownEntityType, e.EntityType)
 	}
@@ -152,6 +161,12 @@ func (e *entity) getVersionFromArtifact(artifact string) (NameVersion, error) {
 		version, err := menderartifact.AppVersionFromArtifact(artifact, e.Name)
 		if err != nil {
 			return NameVersion{}, fmt.Errorf("get version from artifact for application %s: %w", e.Name, err)
+		}
+		return NameVersion{Name: e.Name, Version: version}, nil
+	case entityTypeCoreOSCustomization:
+		version, err := menderartifact.CoreOSCustomizationVersionFromArtifact(artifact)
+		if err != nil {
+			return NameVersion{}, fmt.Errorf("get version from artifact for Core OS customization: %w", err)
 		}
 		return NameVersion{Name: e.Name, Version: version}, nil
 	default:

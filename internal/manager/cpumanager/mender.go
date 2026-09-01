@@ -7,6 +7,7 @@
 package cpumanager
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -27,6 +28,8 @@ const (
 	menderStateCommitting
 	menderStateRecoverInstallCommitting
 	menderStateRecoverInstallClearApp
+	menderStateVerifyingCustomization
+	menderStateRollingBackCustomization
 )
 
 type menderEventCode int
@@ -39,6 +42,8 @@ const (
 	menderEventCommitFinished
 	menderEventRestarted
 	menderEventRecoverFinished
+	menderEventCustomizationVerified
+	menderEventRollbackFinished
 	// external events
 	menderEventJobFinished
 )
@@ -81,9 +86,12 @@ const (
 )
 
 const (
-	rebootTimeout = 30 * time.Second
-	commitTimeout = 30 * time.Second
-	rebootDelay   = 3 * time.Second
+	rebootTimeout                   = 30 * time.Second
+	commitTimeout                   = 30 * time.Second
+	customizationStatusTimeout      = 10 * time.Second
+	customizationStatusPollInterval = time.Second
+	customizationStatusMaxWait      = 5 * time.Minute
+	rebootDelay                     = 3 * time.Second
 
 	// An application artifact cannot change while its update is in progress. A
 	// retry can recover an interrupted rollout, but retrying it indefinitely
@@ -172,6 +180,51 @@ func (m *menderManager) runMenderCommitInBackGround(timeout time.Duration) {
 	}()
 }
 
+func (m *menderManager) runMenderRollbackInBackGround(timeout time.Duration) {
+	m.saveState()
+	go func() {
+		_, _, _, err := execcli.RunCommandWithLogger("mender-update", timeout, m.logger, "rollback")
+		m.emitEvent(menderEvent{Code: menderEventRollbackFinished, Success: err == nil, Message: fmt.Sprintf("err: %v", err)})
+	}()
+}
+
+func (m *menderManager) runCustomizationStatusVerificationInBackground() {
+	m.saveState()
+	go func() {
+		deadline := time.Now().Add(customizationStatusMaxWait)
+		for {
+			stdout, stderr, _, err := execcli.RunCommandWithLogger("os-customization-set", customizationStatusTimeout, m.logger, "status")
+			if err == nil {
+				var status struct {
+					ActiveVersion  *string `json:"active_version"`
+					CandidateSlot  *string `json:"candidate_slot"`
+					CandidateState *string `json:"candidate_state"`
+				}
+				if err := json.Unmarshal([]byte(stdout), &status); err == nil {
+					if status.CandidateSlot != nil && status.CandidateState != nil && *status.CandidateState == "pending" {
+						// Health checks are still running.
+					} else if status.CandidateState == nil && status.ActiveVersion != nil {
+						m.emitEvent(menderEvent{Code: menderEventCustomizationVerified, Success: true})
+						return
+					} else {
+						m.emitEvent(menderEvent{Code: menderEventCustomizationVerified, Success: false, Message: "Core OS customization health checks failed"})
+						return
+					}
+				} else {
+					m.logger.Warnf("Invalid os-customization-set status output: %v", err)
+				}
+			} else {
+				m.logger.Warnf("os-customization-set status failed: %v: %s", err, stderr)
+			}
+			if time.Now().After(deadline) {
+				m.emitEvent(menderEvent{Code: menderEventCustomizationVerified, Success: false, Message: "Timed out waiting for Core OS customization health checks"})
+				return
+			}
+			time.Sleep(customizationStatusPollInterval)
+		}
+	}()
+}
+
 func (m *menderManager) runRebootInBackGround(timeout time.Duration) {
 	m.saveState()
 	go func() {
@@ -233,6 +286,10 @@ func (m *menderManager) HandleEvent(event menderEvent) {
 		m.handleRecoverInstallCommittingEvent(event)
 	case menderStateRecoverInstallClearApp:
 		m.handleRecoverInstallClearAppEvent(event)
+	case menderStateVerifyingCustomization:
+		m.handleVerifyingCustomizationEvent(event)
+	case menderStateRollingBackCustomization:
+		m.handleRollingBackCustomizationEvent(event)
 	default:
 		m.logger.Warnf("Received mender event in unexpected state %d: %v", m.state.State, event)
 	}
@@ -285,7 +342,7 @@ func (m *menderManager) handleInstallFinished(result menderUpdateResult) {
 }
 
 func (m *menderManager) startPostInstallStep() {
-	if m.state.CurrentEntityType == entityTypeCoreOs {
+	if m.state.CurrentEntityType == entityTypeCoreOs || m.state.CurrentEntityType == entityTypeCoreOSCustomization {
 		m.state.State = menderStateRebooting
 		m.runRebootInBackGround(rebootTimeout)
 		return
@@ -301,14 +358,51 @@ func (m *menderManager) handleRebootingEvent(event menderEvent) {
 		m.runRebootInBackGround(rebootTimeout)
 	case menderEventRebootFinished:
 		if event.Success {
-			m.state.State = menderStateCommitting
-			m.runMenderCommitInBackGround(commitTimeout)
+			if m.state.CurrentEntityType == entityTypeCoreOSCustomization {
+				m.state.State = menderStateVerifyingCustomization
+				m.runCustomizationStatusVerificationInBackground()
+			} else {
+				m.state.State = menderStateCommitting
+				m.runMenderCommitInBackGround(commitTimeout)
+			}
 		} else {
 			m.logger.Warnf("Reboot failed during installation. Starting recovery install.")
 			m.emitJobFinished(false, "Could not reboot")
 		}
 	case menderEventNone, menderEventInstallFinished, menderEventCommitFinished, menderEventJobFinished, menderEventRecoverFinished:
 		m.logger.Warnf("Received unexpected mender event code %s in rebooting state: %v", event.Code, event)
+	}
+}
+
+func (m *menderManager) handleVerifyingCustomizationEvent(event menderEvent) {
+	switch event.Code {
+	case menderEventRestarted:
+		m.runCustomizationStatusVerificationInBackground()
+	case menderEventCustomizationVerified:
+		if event.Success {
+			m.state.State = menderStateCommitting
+			m.runMenderCommitInBackGround(commitTimeout)
+			return
+		}
+		m.state.State = menderStateRollingBackCustomization
+		m.runMenderRollbackInBackGround(commitTimeout)
+	case menderEventNone, menderEventInstallFinished, menderEventRebootFinished, menderEventCommitFinished, menderEventJobFinished, menderEventRecoverFinished, menderEventRollbackFinished:
+		m.logger.Warnf("Received unexpected mender event code %s while verifying customization: %v", event.Code, event)
+	}
+}
+
+func (m *menderManager) handleRollingBackCustomizationEvent(event menderEvent) {
+	switch event.Code {
+	case menderEventRestarted:
+		m.runMenderRollbackInBackGround(commitTimeout)
+	case menderEventRollbackFinished:
+		if event.Success {
+			m.emitJobFinished(false, "Core OS customization health checks failed")
+		} else {
+			m.emitJobFinished(false, "Core OS customization health checks failed and Mender rollback failed")
+		}
+	case menderEventNone, menderEventInstallFinished, menderEventRebootFinished, menderEventCommitFinished, menderEventJobFinished, menderEventRecoverFinished, menderEventCustomizationVerified:
+		m.logger.Warnf("Received unexpected mender event code %s while rolling back customization: %v", event.Code, event)
 	}
 }
 
@@ -519,6 +613,10 @@ func (c menderEventCode) String() string {
 		return "RecoverFinished"
 	case menderEventJobFinished:
 		return "JobFinished"
+	case menderEventCustomizationVerified:
+		return "CustomizationVerified"
+	case menderEventRollbackFinished:
+		return "RollbackFinished"
 	default:
 		return fmt.Sprintf("Unknown event code: %d", c)
 	}

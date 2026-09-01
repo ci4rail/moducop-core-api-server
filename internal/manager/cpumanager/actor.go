@@ -20,9 +20,10 @@ import (
 )
 
 const (
-	coreOSEntity  = "coreos"
-	inboxSize     = 10
-	updateTimeout = 10 * time.Minute
+	coreOSEntity              = "coreos"
+	coreOSCustomizationEntity = "core-os-customization"
+	inboxSize                 = 10
+	updateTimeout             = 10 * time.Minute
 )
 
 type persistentState struct {
@@ -56,6 +57,12 @@ func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 		m.logger.Infof("Persistent state file does not exist, initializing new state")
 	} else {
 		m.logger.Infof("Loaded persistent state: %+v", m.state)
+		if m.state.Entities == nil {
+			m.state.Entities = make(map[string]*entity)
+		}
+		if m.state.Entities[coreOSCustomizationEntity] == nil {
+			m.state.Entities[coreOSCustomizationEntity] = newEntity(coreOSCustomizationEntity, entityTypeCoreOSCustomization)
+		}
 		if m.hasRebooted() {
 			hasRebooted = true
 		}
@@ -86,6 +93,10 @@ func (m *CPUManager) handleCommand(cmd Command) {
 		m.handleEntityUpdate(coreOSEntity, entityTypeCoreOs, c.PathToMenderFile, c.Reply)
 	case GetCoreOsState:
 		m.handleGetEntityState(coreOSEntity, c.Reply)
+	case StartCoreOSCustomizationUpdate:
+		m.handleEntityUpdate(coreOSCustomizationEntity, entityTypeCoreOSCustomization, c.PathToMenderFile, c.Reply)
+	case GetCoreOSCustomizationState:
+		m.handleGetEntityState(coreOSCustomizationEntity, c.Reply)
 	case StartApplicationUpdate:
 		m.handleEntityUpdate(c.AppName, entityTypeApplication, c.PathToMenderFile, c.Reply)
 	case GetApplicationState:
@@ -108,7 +119,7 @@ func (m *CPUManager) handleMenderEvent(cmd MenderEvent) {
 	switch cmd.event.Code {
 	case menderEventNone:
 		m.logger.Debugf("Ignoring no-op mender event")
-	case menderEventInstallFinished, menderEventRebootFinished, menderEventCommitFinished, menderEventRestarted, menderEventRecoverFinished:
+	case menderEventInstallFinished, menderEventRebootFinished, menderEventCommitFinished, menderEventRestarted, menderEventRecoverFinished, menderEventCustomizationVerified, menderEventRollbackFinished:
 		// pass low level events to mender manager
 		m.mender.HandleEvent(cmd.event)
 	case menderEventJobFinished:
@@ -179,7 +190,8 @@ func (m *CPUManager) handleEntityUpdate(
 }
 
 func (m *CPUManager) rejectInvalidCoreOSEntity(entityName string, entityType entityType, reply chan Result[struct{}]) bool {
-	if entityType != entityTypeCoreOs || entityName == coreOSEntity {
+	if (entityType != entityTypeCoreOs && entityType != entityTypeCoreOSCustomization) ||
+		(entityName == coreOSEntity || entityName == coreOSCustomizationEntity) {
 		return false
 	}
 	reply <- Result[struct{}]{Err: NewCodedError(
@@ -306,6 +318,7 @@ func (m *CPUManager) setInitialPersistentState() {
 		Entities: make(map[string]*entity),
 	}
 	m.state.Entities[coreOSEntity] = newEntity(coreOSEntity, entityTypeCoreOs)
+	m.state.Entities[coreOSCustomizationEntity] = newEntity(coreOSCustomizationEntity, entityTypeCoreOSCustomization)
 	m.state.MenderState = menderPersistentState{
 		State:           menderStateIdle,
 		CurrentArtifact: "",
@@ -345,5 +358,9 @@ func (m *CPUManager) cleanUpdateFiles() {
 	err = updatestore.Clean(m.logger, "coreos-*", excludes)
 	if err != nil {
 		m.logger.Errorf("Failed to clean coreos update files: %v", err)
+	}
+	err = updatestore.Clean(m.logger, "core-os-customization-*", excludes)
+	if err != nil {
+		m.logger.Errorf("Failed to clean Core OS customization update files: %v", err)
 	}
 }
