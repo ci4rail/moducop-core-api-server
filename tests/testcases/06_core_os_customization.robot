@@ -7,6 +7,11 @@ Resource    common.resource
 Test Tags    mender    core-os-customization
 
 *** Test Cases ***
+Core OS Customization Factory Version Shall Be Reported
+    ${response}=    GET    ${API_URL}/software/core-os-customization/factory    expected_status=any
+    Should Be Equal As Integers    ${response.status_code}    200
+    Should Be Equal    ${response.json()['factory_version']}    ${None}
+
 Core OS Customization Update Shall Pass
     ${artifact}=    Set Variable    ${STATE_DIR}/site-good.mender
     Create Customization Artifact    ${artifact}    site-good-1.0.0    true

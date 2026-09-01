@@ -71,6 +71,12 @@ type GetCoreOSCustomizationState struct {
 
 func (GetCoreOSCustomizationState) isCommand() {}
 
+type GetCoreOSCustomizationFactoryVersion struct {
+	Reply chan Result[string]
+}
+
+func (GetCoreOSCustomizationFactoryVersion) isCommand() {}
+
 type StartApplicationUpdate struct {
 	AppName string
 	// path to the mender file to be installed

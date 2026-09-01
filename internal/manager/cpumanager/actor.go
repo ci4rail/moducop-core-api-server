@@ -99,6 +99,8 @@ func (m *CPUManager) handleCommand(cmd Command) {
 		m.handleEntityUpdate(coreOSCustomizationEntity, entityTypeCoreOSCustomization, c.PathToMenderFile, c.Reply)
 	case GetCoreOSCustomizationState:
 		m.handleGetEntityState(coreOSCustomizationEntity, c.Reply)
+	case GetCoreOSCustomizationFactoryVersion:
+		m.handleGetCoreOSCustomizationFactoryVersion(c.Reply)
 	case StartApplicationUpdate:
 		m.handleEntityUpdate(c.AppName, entityTypeApplication, c.PathToMenderFile, c.Reply)
 	case GetApplicationState:
@@ -259,6 +261,18 @@ func (m *CPUManager) handleGetEntityState(entityName string, reply chan Result[E
 			nv.Version,
 		},
 	}}
+}
+
+func (m *CPUManager) handleGetCoreOSCustomizationFactoryVersion(reply chan Result[string]) {
+	version, err := coreOSCustomizationFactoryVersionFromTargetFS()
+	if err != nil {
+		reply <- Result[string]{Err: NewCodedError(
+			ErrCodeGetVersionFailed,
+			fmt.Sprintf("get factory customization version: %v", err),
+		)}
+		return
+	}
+	reply <- Result[string]{Value: version}
 }
 
 func (m *CPUManager) handleListApplications(reply chan Result[[]string]) {

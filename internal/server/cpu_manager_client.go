@@ -100,6 +100,23 @@ func (a *API) handleGetCoreOSCustomization(w http.ResponseWriter, r *http.Reques
 	a.writeJSON(w, res)
 }
 
+func (a *API) handleGetCoreOSCustomizationFactory(w http.ResponseWriter, r *http.Request) {
+	reply := make(chan cpumanager.Result[string], 1)
+	version, code, message, err := execCPUManagerCommand(r.Context(), a.cpuManager,
+		cpumanager.GetCoreOSCustomizationFactoryVersion{Reply: reply}, reply)
+	if err != nil {
+		a.writeJSONError(w, statusFromCPUManagerCode(code), code, message)
+		return
+	}
+	var factoryVersion *string
+	if version != "" {
+		factoryVersion = &version
+	}
+	a.writeJSON(w, struct {
+		FactoryVersion *string `json:"factory_version"`
+	}{FactoryVersion: factoryVersion})
+}
+
 func (a *API) handleLoadApplication(w http.ResponseWriter, r *http.Request) {
 	a.handleLoadNamedUpdate(
 		w,

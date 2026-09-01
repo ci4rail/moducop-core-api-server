@@ -20,7 +20,8 @@ import (
 )
 
 type coreOSCustomizationStatus struct {
-	ActiveVersion *string `json:"active_version"`
+	ActiveVersion  *string `json:"active_version"`
+	FactoryVersion *string `json:"factory_version"`
 }
 
 const (
@@ -110,18 +111,37 @@ func appVersionFromData(data string) (string, error) {
 }
 
 func coreOSCustomizationVersionFromTargetFS() (string, error) {
-	stdout, stderr, _, err := execcli.RunCommand("os-customization-set", customizationStatusCommandTimeout, "status")
+	status, err := coreOSCustomizationStatusFromTargetFS()
 	if err != nil {
-		return "", fmt.Errorf("run os-customization-set status: %w: %s", err, stderr)
-	}
-	var status coreOSCustomizationStatus
-	if err := json.Unmarshal([]byte(stdout), &status); err != nil {
-		return "", fmt.Errorf("parse os-customization-set status: %w", err)
+		return "", err
 	}
 	if status.ActiveVersion == nil {
 		return "", nil
 	}
 	return *status.ActiveVersion, nil
+}
+
+func coreOSCustomizationFactoryVersionFromTargetFS() (string, error) {
+	status, err := coreOSCustomizationStatusFromTargetFS()
+	if err != nil {
+		return "", err
+	}
+	if status.FactoryVersion == nil {
+		return "", nil
+	}
+	return *status.FactoryVersion, nil
+}
+
+func coreOSCustomizationStatusFromTargetFS() (coreOSCustomizationStatus, error) {
+	stdout, stderr, _, err := execcli.RunCommand("os-customization-set", customizationStatusCommandTimeout, "status")
+	if err != nil {
+		return coreOSCustomizationStatus{}, fmt.Errorf("run os-customization-set status: %w: %s", err, stderr)
+	}
+	var status coreOSCustomizationStatus
+	if err := json.Unmarshal([]byte(stdout), &status); err != nil {
+		return coreOSCustomizationStatus{}, fmt.Errorf("parse os-customization-set status: %w", err)
+	}
+	return status, nil
 }
 
 func listApplicationsFromTargetFS() ([]string, error) {
