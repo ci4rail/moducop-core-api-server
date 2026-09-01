@@ -188,6 +188,7 @@ func (m *menderManager) runMenderRollbackInBackGround(timeout time.Duration) {
 	}()
 }
 
+//nolint:nestif // Polling distinguishes pending, successful, and failed health-check states.
 func (m *menderManager) runCustomizationStatusVerificationInBackground() {
 	m.saveState()
 	go func() {
@@ -201,12 +202,11 @@ func (m *menderManager) runCustomizationStatusVerificationInBackground() {
 					CandidateState *string `json:"candidate_state"`
 				}
 				if err := json.Unmarshal([]byte(stdout), &status); err == nil {
-					if status.CandidateSlot != nil && status.CandidateState != nil && *status.CandidateState == "pending" {
-						// Health checks are still running.
-					} else if status.CandidateState == nil && status.ActiveVersion != nil {
-						m.emitEvent(menderEvent{Code: menderEventCustomizationVerified, Success: true})
-						return
-					} else {
+					if status.CandidateSlot == nil || status.CandidateState == nil || *status.CandidateState != "pending" {
+						if status.CandidateState == nil && status.ActiveVersion != nil {
+							m.emitEvent(menderEvent{Code: menderEventCustomizationVerified, Success: true})
+							return
+						}
 						m.emitEvent(menderEvent{Code: menderEventCustomizationVerified, Success: false, Message: "Core OS customization health checks failed"})
 						return
 					}
@@ -297,7 +297,7 @@ func (m *menderManager) HandleEvent(event menderEvent) {
 
 func (m *menderManager) handleInstallingEvent(event menderEvent) {
 	switch event.Code {
-	case menderEventNone, menderEventRebootFinished, menderEventCommitFinished, menderEventJobFinished:
+	case menderEventNone, menderEventRebootFinished, menderEventCommitFinished, menderEventJobFinished, menderEventCustomizationVerified, menderEventRollbackFinished:
 		m.logger.Warnf("Received unexpected mender event code %s in installing state: %v", event.Code, event)
 	case menderEventRestarted:
 		m.logger.Infof("Mender manager restarted while installing. Restarting install")
@@ -369,7 +369,7 @@ func (m *menderManager) handleRebootingEvent(event menderEvent) {
 			m.logger.Warnf("Reboot failed during installation. Starting recovery install.")
 			m.emitJobFinished(false, "Could not reboot")
 		}
-	case menderEventNone, menderEventInstallFinished, menderEventCommitFinished, menderEventJobFinished, menderEventRecoverFinished:
+	case menderEventNone, menderEventInstallFinished, menderEventCommitFinished, menderEventJobFinished, menderEventRecoverFinished, menderEventCustomizationVerified, menderEventRollbackFinished:
 		m.logger.Warnf("Received unexpected mender event code %s in rebooting state: %v", event.Code, event)
 	}
 }
@@ -419,7 +419,7 @@ func (m *menderManager) handleCommittingEvent(event menderEvent) {
 		} else {
 			m.emitJobFinished(false, fmt.Sprintf("Mender commit failed: %s", event.UpdateResult))
 		}
-	case menderEventNone, menderEventInstallFinished, menderEventRebootFinished, menderEventJobFinished, menderEventRecoverFinished:
+	case menderEventNone, menderEventInstallFinished, menderEventRebootFinished, menderEventJobFinished, menderEventRecoverFinished, menderEventCustomizationVerified, menderEventRollbackFinished:
 		m.logger.Warnf("Received unexpected mender event code %s in committing state: %v", event.Code, event)
 	}
 }
@@ -447,7 +447,7 @@ func (m *menderManager) handleRecoverInstallCommittingEvent(event menderEvent) {
 			m.logger.Warnf("Received unexpected mender update result for failed commit in recovery install: %v", event.UpdateResult)
 			m.emitRecoverfinished(false, fmt.Sprintf("Unexpected mender update result during recovery commit: %s", event.UpdateResult))
 		}
-	case menderEventNone, menderEventInstallFinished, menderEventRebootFinished, menderEventJobFinished, menderEventRecoverFinished:
+	case menderEventNone, menderEventInstallFinished, menderEventRebootFinished, menderEventJobFinished, menderEventRecoverFinished, menderEventCustomizationVerified, menderEventRollbackFinished:
 		m.logger.Warnf("Received unexpected mender event code %s in recover install state: %v", event.Code, event)
 	}
 }
@@ -457,7 +457,7 @@ func (m *menderManager) handleRecoverInstallClearAppEvent(event menderEvent) {
 	case menderEventRestarted:
 		m.logger.Infof("Mender manager restarted while in recover install clear app. Restarting recovery install")
 		m.clearAppDir()
-	case menderEventNone, menderEventRecoverFinished, menderEventCommitFinished, menderEventInstallFinished, menderEventRebootFinished, menderEventJobFinished:
+	case menderEventNone, menderEventRecoverFinished, menderEventCommitFinished, menderEventInstallFinished, menderEventRebootFinished, menderEventJobFinished, menderEventCustomizationVerified, menderEventRollbackFinished:
 		m.logger.Warnf("Received unexpected mender event code %s in recover install clear app state: %v", event.Code, event)
 	}
 }
@@ -597,6 +597,7 @@ func menderUpdateResultText(result menderUpdateResult) string {
 	return ""
 }
 
+//nolint:cyclop // Each event has a distinct diagnostic name.
 func (c menderEventCode) String() string {
 	switch c {
 	case menderEventNone:

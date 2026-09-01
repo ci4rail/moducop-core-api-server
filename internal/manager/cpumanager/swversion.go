@@ -24,10 +24,11 @@ type coreOSCustomizationStatus struct {
 }
 
 const (
-	issueFilePath    = "/etc/issue"
-	menderAppRootDir = "/data/mender-app"
-	minIssueLines    = 2
-	issueMatchGroups = 3
+	issueFilePath                     = "/etc/issue"
+	menderAppRootDir                  = "/data/mender-app"
+	minIssueLines                     = 2
+	issueMatchGroups                  = 3
+	customizationStatusCommandTimeout = 10 * time.Second
 )
 
 var (
@@ -109,7 +110,7 @@ func appVersionFromData(data string) (string, error) {
 }
 
 func coreOSCustomizationVersionFromTargetFS() (string, error) {
-	stdout, stderr, _, err := execcli.RunCommand("os-customization-set", 10*time.Second, "status")
+	stdout, stderr, _, err := execcli.RunCommand("os-customization-set", customizationStatusCommandTimeout, "status")
 	if err != nil {
 		return "", fmt.Errorf("run os-customization-set status: %w: %s", err, stderr)
 	}

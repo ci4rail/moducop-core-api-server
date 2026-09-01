@@ -39,7 +39,10 @@ var (
 	errCustomizationPayloadType   = errors.New("artifact is not an os-customization payload")
 	errCustomizationManifest      = errors.New("customization payload missing manifest.json")
 	errCustomizationVersion       = errors.New("customization manifest missing version")
+	errArtifactMissingDataTar     = errors.New("artifact missing data/0000.tar(.gz)")
 )
+
+const headerTarGzName = "header.tar.gz"
 
 var legacyRootfsImageVersionRe = regexp.MustCompile(`^(?P<name>.+)-image(?P<suffix>-dirty)?_(?P<version>v.+?)(?:-dev)?$`)
 
@@ -102,6 +105,8 @@ func AppVersionFromArtifact(path string, appName string) (string, error) {
 
 // CoreOSCustomizationVersionFromArtifact validates an os-customization artifact
 // and returns the version in its manifest-only payload.
+//
+//nolint:cyclop // Mender artifacts may carry compressed or uncompressed headers and payloads.
 func CoreOSCustomizationVersionFromArtifact(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -114,19 +119,19 @@ func CoreOSCustomizationVersionFromArtifact(path string) (string, error) {
 	var dataTarGz bool
 	for {
 		h, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
 			return "", fmt.Errorf("read artifact tar: %w", err)
 		}
 		switch h.Name {
-		case "header.tar", "header.tar.gz":
+		case "header.tar", headerTarGzName:
 			headerTar, err = io.ReadAll(tr)
 			if err != nil {
 				return "", fmt.Errorf("read %s: %w", h.Name, err)
 			}
-			if h.Name == "header.tar.gz" {
+			if h.Name == headerTarGzName {
 				gr, err := gzip.NewReader(bytes.NewReader(headerTar))
 				if err != nil {
 					return "", fmt.Errorf("open header.tar.gz: %w", err)
@@ -149,7 +154,7 @@ func CoreOSCustomizationVersionFromArtifact(path string) (string, error) {
 		return "", errCustomizationPayloadType
 	}
 	if len(dataTar) == 0 {
-		return "", errors.New("artifact missing data/0000.tar(.gz)")
+		return "", errArtifactMissingDataTar
 	}
 	if dataTarGz {
 		gr, err := gzip.NewReader(bytes.NewReader(dataTar))
@@ -187,12 +192,13 @@ func customizationPayloadType(headerTar []byte) bool {
 	}
 }
 
+//nolint:cyclop,nestif // Supports the direct and nested payload archive forms produced by Mender modules.
 func customizationVersionFromTar(data []byte) (string, error) {
 	tr := tar.NewReader(bytes.NewReader(data))
 	var nested []byte
 	for {
 		h, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

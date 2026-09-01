@@ -41,6 +41,7 @@ type CPUManager struct {
 	mender *menderManager
 }
 
+//nolint:nestif // Persistent-state migration must happen before reboot detection.
 func New(persistentPath string, logLevel loglite.Level) (*CPUManager, error) {
 	m := &CPUManager{
 		logger: loglite.New("cpumanager", os.Stdout, logLevel),
@@ -87,6 +88,7 @@ func (m *CPUManager) loop() {
 	}
 }
 
+//nolint:cyclop // The command dispatcher is intentionally a single type switch.
 func (m *CPUManager) handleCommand(cmd Command) {
 	switch c := cmd.(type) {
 	case StartCoreOsUpdate:

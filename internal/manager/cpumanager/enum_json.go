@@ -148,6 +148,7 @@ func (s menderState) MarshalJSON() ([]byte, error) {
 	return json.Marshal(text)
 }
 
+//nolint:cyclop // Every persisted Mender state has an explicit decoding branch.
 func (s *menderState) UnmarshalJSON(data []byte) error {
 	var text string
 	if err := json.Unmarshal(data, &text); err != nil {
