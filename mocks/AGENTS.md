@@ -9,6 +9,7 @@ SPDX-License-Identifier: Apache-2.0
 We need mocks for all interfaces used by the moducop-core-api-server. This includes:
 - Filesystem operations 
 - mender-update command
+- os-customization-set command
 - reboot command
 - docker command
 
@@ -31,6 +32,7 @@ Also the "mender-update install" command, when called with an application update
 mender-update is used for
 - rootfs updates
 - application updates
+- Core OS Customization Set updates
 
 They are NOT independent, they share internal state. While one update is installed but not committed, no other update can be installed. If a rootfs update is installed but not committed, application updates cannot be installed, and vice versa.
 
@@ -113,6 +115,61 @@ exit with code 1.
 
 
 data/0000.tar.gz contains an ext4 image. Make the content available somehow. I need to inspect /etc/issue in the new rootfs after installation.
+
+### mender-update for Core OS Customization Set updates
+
+Core OS Customization Set artifacts use the Mender payload type
+`os-customization`. They share the Mender update transaction with rootfs and
+application updates: while any update is installed but not committed or rolled
+back, another update cannot be installed.
+
+For the mock, a customization payload contains only its `manifest.json`; the
+mock does not simulate extraction of the `etc/` tree or the OverlayFS behavior
+of the customization manager.
+
+The manifest's optional `health_checks` decides the result after the reboot
+requested by a successful installation. Test artifacts use only checks of this
+form:
+
+```json
+{
+  "type": "command",
+  "command": ["true"]
+}
+```
+
+or `command: ["false"]`. All health checks must pass. `true` succeeds and
+`false` fails. The mock shall reject unsupported health-check types or command
+forms.
+
+`mender-update install <image-file>` stages the manifest as a pending
+customization update and prints the regular successful-install message:
+
+```
+Installed, but not committed.
+Use 'commit' to update, or 'rollback' to roll back the update.
+```
+
+It must not change `/etc`. On the following `reboot`, the mock evaluates the
+health checks. A passing set becomes the active last-known-good customization;
+`mender-update commit` then completes the Mender transaction. A failing set is
+marked as failed and may be cleared with `mender-update rollback`. Subsequent
+reboot calls must not turn a failed set into a successful deployment.
+
+### os-customization-set command
+
+The mock shall provide `os-customization-set status`. It shall print JSON with
+the status fields used by the real command: `active_slot`, `active_version`,
+`last_good_slot`, `last_good_version`, `candidate_slot`, `candidate_version`,
+`candidate_state`, `candidate_attempts`, and `factory_version`.
+
+The status is backed by the same state as `mender-update`. Before a
+customization deployment, all version and slot fields are `null`. While an
+artifact is staged, it reports a `pending` candidate. After reboot, a passing
+health check makes the candidate the active last-known-good version; a failing
+check reports `candidate_state: "rolled-back"` and retains the previous active
+version. The mock does not model factory customizations, so `factory_version`
+is always `null`.
 
 ### Reboot command
 

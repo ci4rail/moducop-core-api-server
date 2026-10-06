@@ -49,6 +49,16 @@ type AppMetaData struct {
 	Version         string   `json:"version"`
 }
 
+type CustomizationManifest struct {
+	Version      string        `json:"version"`
+	HealthChecks []HealthCheck `json:"health_checks"`
+}
+
+type HealthCheck struct {
+	Type    string          `json:"type"`
+	Command json.RawMessage `json:"command"`
+}
+
 func ParseArtifactHeader(path string) (HeaderInfo, AppMetaData, error) {
 	var info HeaderInfo
 	var metadata AppMetaData
@@ -244,6 +254,135 @@ func ParseAndExtractAppArtifact(path string, appManifestDir string) (HeaderInfo,
 		return info, metadata, err
 	}
 	return info, metadata, nil
+}
+
+// ParseCustomizationArtifact reads the manifest-only payload used by the mock.
+// The payload is an archive in data/0000.tar or data/0000.tar.gz whose root
+// contains manifest.json. No /etc overlay content is modeled here.
+func ParseCustomizationArtifact(path string) (HeaderInfo, CustomizationManifest, bool, error) {
+	info, _, err := ParseArtifactHeader(path)
+	if err != nil {
+		return HeaderInfo{}, CustomizationManifest{}, false, err
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return info, CustomizationManifest{}, false, err
+	}
+	defer f.Close()
+
+	tr := tar.NewReader(f)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return info, CustomizationManifest{}, false, fmt.Errorf("read artifact tar: %w", err)
+		}
+		if h.Name != "data/0000.tar" && h.Name != "data/0000.tar.gz" {
+			continue
+		}
+		data, err := io.ReadAll(tr)
+		if err != nil {
+			return info, CustomizationManifest{}, false, fmt.Errorf("read %s: %w", h.Name, err)
+		}
+		var payload io.Reader = bytes.NewReader(data)
+		if h.Name == "data/0000.tar.gz" {
+			gr, err := gzip.NewReader(payload)
+			if err != nil {
+				return info, CustomizationManifest{}, false, fmt.Errorf("open data/0000.tar.gz: %w", err)
+			}
+			defer gr.Close()
+			payload = gr
+		}
+		manifest, passed, err := parseCustomizationManifest(payload)
+		return info, manifest, passed, err
+	}
+	return info, CustomizationManifest{}, false, fmt.Errorf("artifact missing data/0000.tar or data/0000.tar.gz")
+}
+
+func parseCustomizationManifest(payload io.Reader) (CustomizationManifest, bool, error) {
+	tr := tar.NewReader(payload)
+	var nestedPayload []byte
+	var nestedPayloadGz bool
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return CustomizationManifest{}, false, fmt.Errorf("read customization payload: %w", err)
+		}
+		name := strings.TrimPrefix(filepath.Clean(h.Name), "./")
+		if name != "manifest.json" {
+			// module-image artifacts can place the customization archive itself
+			// in data/0000.tar. Accept that single nested archive too.
+			if h.Typeflag == tar.TypeReg && nestedPayload == nil && (strings.HasSuffix(name, ".tar") || strings.HasSuffix(name, ".tar.gz")) {
+				nestedPayload, err = io.ReadAll(tr)
+				if err != nil {
+					return CustomizationManifest{}, false, fmt.Errorf("read nested customization payload: %w", err)
+				}
+				nestedPayloadGz = strings.HasSuffix(name, ".tar.gz")
+			}
+			continue
+		}
+		if h.Typeflag != tar.TypeReg {
+			return CustomizationManifest{}, false, fmt.Errorf("customization manifest is not a regular file")
+		}
+		data, err := io.ReadAll(tr)
+		if err != nil {
+			return CustomizationManifest{}, false, fmt.Errorf("read customization manifest: %w", err)
+		}
+		var manifest CustomizationManifest
+		if err := json.Unmarshal(data, &manifest); err != nil {
+			return CustomizationManifest{}, false, fmt.Errorf("parse customization manifest: %w", err)
+		}
+		if manifest.Version == "" {
+			return CustomizationManifest{}, false, fmt.Errorf("customization manifest missing version")
+		}
+		passed := true
+		for _, check := range manifest.HealthChecks {
+			if check.Type != "command" {
+				return CustomizationManifest{}, false, fmt.Errorf("unsupported customization health check type: %s", check.Type)
+			}
+			command, err := parseMockHealthCheckCommand(check.Command)
+			if err != nil {
+				return CustomizationManifest{}, false, err
+			}
+			if command == "false" {
+				passed = false
+			}
+		}
+		return manifest, passed, nil
+	}
+	if nestedPayload != nil {
+		var nested io.Reader = bytes.NewReader(nestedPayload)
+		if nestedPayloadGz {
+			gr, err := gzip.NewReader(nested)
+			if err != nil {
+				return CustomizationManifest{}, false, fmt.Errorf("open nested customization payload: %w", err)
+			}
+			defer gr.Close()
+			nested = gr
+		}
+		return parseCustomizationManifest(nested)
+	}
+	return CustomizationManifest{}, false, fmt.Errorf("customization payload missing manifest.json")
+}
+
+func parseMockHealthCheckCommand(raw json.RawMessage) (string, error) {
+	var command string
+	if err := json.Unmarshal(raw, &command); err == nil {
+		if command == "true" || command == "false" {
+			return command, nil
+		}
+	}
+	var argv []string
+	if err := json.Unmarshal(raw, &argv); err == nil && len(argv) == 1 && (argv[0] == "true" || argv[0] == "false") {
+		return argv[0], nil
+	}
+	return "", fmt.Errorf("unsupported customization command health check")
 }
 
 func parseHeaderTarGz(data []byte) (HeaderInfo, AppMetaData, error) {

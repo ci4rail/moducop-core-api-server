@@ -62,6 +62,44 @@ func (a *API) handleGetCoreOS(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, res)
 }
 
+func (a *API) handleLoadCoreOSCustomization(w http.ResponseWriter, r *http.Request) {
+	tmpPath, errCode, err := a.saveBodyToFile(r.Body, "core-os-customization-*")
+	if err != nil {
+		a.writeJSONError(w, http.StatusInternalServerError, errCode, fmt.Sprintf("failed to save update file: %v", err))
+		return
+	}
+	keepFile := false
+	defer func() {
+		if !keepFile {
+			if err := removeTempUpdateFile(tmpPath); err != nil {
+				a.logger.Errorf("failed to remove temporary file %s: %v", tmpPath, err)
+			}
+		}
+	}()
+
+	reply := make(chan cpumanager.Result[struct{}], 1)
+	_, code, message, err := execCPUManagerCommand(r.Context(), a.cpuManager,
+		cpumanager.StartCoreOSCustomizationUpdate{PathToMenderFile: tmpPath, Reply: reply}, reply)
+	if err != nil {
+		a.writeJSONError(w, statusFromCPUManagerCode(code), code, message)
+		return
+	}
+	a.logger.Infof("started Core OS customization update")
+	keepFile = true
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func (a *API) handleGetCoreOSCustomization(w http.ResponseWriter, r *http.Request) {
+	reply := make(chan cpumanager.Result[cpumanager.EntityStatus], 1)
+	res, code, message, err := execCPUManagerCommand(r.Context(), a.cpuManager,
+		cpumanager.GetCoreOSCustomizationState{Reply: reply}, reply)
+	if err != nil {
+		a.writeJSONError(w, statusFromCPUManagerCode(code), code, message)
+		return
+	}
+	a.writeJSON(w, res)
+}
+
 func (a *API) handleLoadApplication(w http.ResponseWriter, r *http.Request) {
 	a.handleLoadNamedUpdate(
 		w,

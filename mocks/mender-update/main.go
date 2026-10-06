@@ -136,11 +136,39 @@ func runInstall(_ context.Context, imagePath string) error {
 			return errors.New(msg)
 		}
 		return installApp(&st, imagePath, metadata)
+	case string(mockmender.UpdateTypeCustomization):
+		if st.Stage == installed || st.Stage == trial {
+			msg := "Operation now in progress: Update already in progress. Please commit or roll back first"
+			fmt.Println("Installation failed. System not modified.")
+			fmt.Printf("Could not fulfill request: %s\n", msg)
+			return errors.New(msg)
+		}
+		return installCustomization(&st, imagePath)
 	default:
 		fmt.Println("record_id=1 severity=error time=\"2026-Mar-03 07:43:32.990506\" name=\"Global\" msg=\"Unsupported payload type\"")
 		fmt.Println("Installation failed. System not modified.")
 		return fmt.Errorf("unsupported payload")
 	}
+}
+
+func installCustomization(st *mockmender.State, imagePath string) error {
+	info, manifest, healthExpectedPass, err := mockmender.ParseCustomizationArtifact(imagePath)
+	if err != nil {
+		fmt.Printf("record_id=1 severity=error time=\"2026-Mar-03 07:05:21.952463\" name=\"Global\" msg=\"%s\"\n", err.Error())
+		fmt.Println("Installation failed. System not modified.")
+		fmt.Printf("Could not fulfill request: %s\n", err.Error())
+		return err
+	}
+	if len(info.Payloads) == 0 || info.Payloads[0].Type != string(mockmender.UpdateTypeCustomization) {
+		return fmt.Errorf("unsupported payload type")
+	}
+	mockmender.SetInstalledCustomization(st, filepath.Base(imagePath), manifest.Version, healthExpectedPass)
+	if err := mockmender.SaveState(*st); err != nil {
+		return err
+	}
+	fmt.Println("Installed, but not committed.")
+	fmt.Println("Use 'commit' to update, or 'rollback' to roll back the update.")
+	return nil
 }
 
 func installRootfs(st *mockmender.State, imagePath string) error {
@@ -318,6 +346,17 @@ func runCommit() error {
 			}
 			fmt.Println("Committed.")
 			fmt.Println("Installation failed, and Update Module does not support rollback. System may be in an inconsistent state.")
+			return nil
+		case string(mockmender.UpdateTypeCustomization):
+			if !st.CustomizationHealthEvaluated || !st.CustomizationHealthPassed {
+				fmt.Println("Installation failed. Rolled back modifications.")
+				return errors.New("customization health checks did not pass")
+			}
+			mockmender.CommitCustomization(&st)
+			if err := mockmender.SaveState(st); err != nil {
+				return err
+			}
+			fmt.Println("Committed.")
 			return nil
 		default:
 			mockmender.RollbackImmediate(&st)

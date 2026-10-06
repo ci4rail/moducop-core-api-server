@@ -32,6 +32,15 @@ func main() {
 		if st.PendingUpdateType == string(mockmender.UpdateTypeRootfs) {
 			// First reboot after rootfs install: trial boot into new rootfs.
 			mockmender.TrialBoot(&st)
+		} else if st.PendingUpdateType == string(mockmender.UpdateTypeCustomization) {
+			// The real customization manager evaluates this after boot. The mock
+			// only models manifest command health checks, not the /etc overlay.
+			mockmender.EvaluateCustomizationHealth(&st, st.CustomizationHealthExpectedPass)
+			if st.CustomizationHealthExpectedPass {
+				fmt.Println("Core OS Customization health checks passed.")
+			} else {
+				fmt.Println("Core OS Customization health checks failed.")
+			}
 		} else {
 			// Non-rootfs pending updates are treated as failed on reboot if uncommitted.
 			mockmender.RollbackImmediate(&st)
