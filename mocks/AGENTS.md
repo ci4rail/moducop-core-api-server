@@ -36,6 +36,59 @@ mender-update is used for
 
 They are NOT independent, they share internal state. While one update is installed but not committed, no other update can be installed. If a rootfs update is installed but not committed, application updates cannot be installed, and vice versa.
 
+### Mender version profiles
+
+Set `MOCK_MENDER_VERSION=4` or `MOCK_MENDER_VERSION=5` in the environment
+inherited by the mock commands. Unset or empty selects `4`, preserving the
+existing mock behavior. Other values are rejected before accessing mock state.
+The setting is read on each invocation and is not persisted in `state.json`.
+
+```sh
+MOCK_MENDER_VERSION=4 mocks/bin/mender-update install update.mender
+MOCK_MENDER_VERSION=5 mocks/bin/mender-update install update.mender
+```
+
+`mender-update --version` reports `4.0.5` or `5.1.0` for the selected profile.
+The Mender 4 output examples below describe the default profile. Mender 5 mode
+uses the same rootfs, application, customization and reboot simulation, with
+these differences for the existing commands:
+
+- Failure summaries print the operation and disposition on separate lines.
+  Opening/parsing an artifact uses `Streaming failed.`; installation uses
+  `Installation failed.`; commit uses `Committing failed.`.
+- Successful rollback after a failed commit prints `Rolled back.` instead of
+  `Rolled back modifications.`.
+- Diagnostics and `Could not fulfill request:` messages go to stderr.
+- Refusing an install because an update is pending prints the pending-update
+  diagnostic without an installation-failure summary.
+- Commit or rollback without an update prints `No update in progress.` and
+  exits with code 2. The default profile retains the legacy mock behavior
+  (`Nothing to commit.` / `Rolled back.`, exit 0).
+- `commit` rejects an interrupted installation with `Cannot commit from this
+  state.` on stderr and exit code 1, without changing the saved transaction.
+  Completed installations awaiting commit remain committable.
+- `resume` continues an interrupted installation using its saved artifact path
+  and checkpoint, or commits a transaction already awaiting commit. With no
+  pending transaction it exits with code 2. Mender 4 mode rejects `resume`.
+
+The Mender 5 profile persists `install_phase` and `resume_artifact` in
+`state.json`. Application checkpoints distinguish stopped containers, renamed
+old files, and extracted new files; resuming skips completed steps and finishes
+with the application's regular automatic commit. Rootfs and customization
+installation checkpoints can rerun installation, which finishes awaiting
+commit. Error injection remains configured until explicitly cleared.
+
+Legacy state without a phase is treated as awaiting commit for rootfs and
+customization. Legacy interrupted application state is rejected by `commit`;
+without a saved artifact path it cannot be resumed and must be rolled back.
+
+Successful install and commit messages are shared by both profiles. These are
+profiles of the mock's existing command set, not complete Mender clients:
+`--stop-before`, `--reboot-exit-code`, signature enforcement, and
+post-commit/cleanup error injection are not simulated yet.
+
+Verify both profiles with `go test ./mocks/...` from the repository root.
+
 ### mender-update for Rootfs
 
 shall simulate rootfs A/B update.

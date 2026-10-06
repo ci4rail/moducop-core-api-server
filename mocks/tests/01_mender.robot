@@ -57,23 +57,23 @@ Update shall be refused if update in progress
     # try to install again without rebooting first, should be refused
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/Moducop-CPU01_Standard-Image_v2.7.0.40ee657.20260218.1208.mender
     Should Be Equal As Integers    ${result.rc}    1
-    Should Contain    ${result.stdout}   Update already in progress
+    Should Contain    ${result.stdout}${result.stderr}   Update already in progress
     # try to install app update, should also be refused
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
     Should Be Equal As Integers    ${result.rc}    1
-    Should Contain    ${result.stdout}   Update already in progress
+    Should Contain    ${result.stdout}${result.stderr}   Update already in progress
 
 Commit Rootfs Without Reboot Shall Cause Rollback
     ${result}=    Run Process   mender-update  commit
     Should Be Equal As Integers    ${result.rc}    1
-    Should Contain    ${result.stdout}   Installation failed. Rolled back modifications.
+    Should Contain    ${result.stdout}   ${COMMIT_ROLLBACK_OUTPUT}
     ${content}=    Get File        ${VIRT_FS}/etc/issue
     Should Contain    ${content}    Moducop-CPU01_Standard-Image_v2.7.0
 
 Update for different Machine Shall be Refused
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/Moducop-CPU01Plus_Standard-Image_v2.7.0.40ee657.20260218.1033.mender
     Should Be Equal As Integers    ${result.rc}    1
-    Should Contain    ${result.stdout}    Artifact device type doesn't match
+    Should Contain    ${result.stdout}${result.stderr}    Artifact device type doesn't match
 
 Initial Application Update Shall Pass
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
@@ -120,25 +120,36 @@ Application Error Inject After Stop Old Containers
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
     Should Be Equal As Integers    ${result.rc}    1
     Log To Console   stdout: ${result.stdout}
-    Should Contain    ${result.stdout}   Update already in progress
+    Should Contain    ${result.stdout}${result.stderr}   Update already in progress
 
-    # To get out of this situation, we need to commit the update, so that I can try again installation
-    ${result}=    Run Process   mender-update  commit
-    Should Be Equal As Integers    ${result.rc}    0
-    Log To Console  stdout: ${result.stdout}
-    Should Contain    ${result.stdout}    Installation failed, and Update Module does not support rollback. System may be in an inconsistent state.
+    IF    '${MENDER_VERSION}' == '5'
+        ${result}=    Run Process    mender-update    commit
+        Should Be Equal As Integers    ${result.rc}    1
+        Should Contain    ${result.stderr}    Cannot commit from this state.
+        ${result}=    Run Process    mender-update    resume
+        Should Be Equal As Integers    ${result.rc}    0
+        Should Contain    ${result.stdout}    Installed and committed.
+        ${result}=    Run Docker PS WithLabels
+        Should Contain    ${result.stdout}    nginx-demo-web-1
+    ELSE
+        # To get out of this situation, we need to commit the update, so that I can try again installation
+        ${result}=    Run Process   mender-update  commit
+        Should Be Equal As Integers    ${result.rc}    0
+        Log To Console  stdout: ${result.stdout}
+        Should Contain    ${result.stdout}    ${INCONSISTENT_OUTPUT}
 
-    # next install is blocked until stale app dirs are removed manually
-    ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
-    Should Be Equal As Integers    ${result.rc}    1
-    Should Contain    ${result.stdout}    Installation failed, and Update Module does not support rollback. System may be in an inconsistent state.
+        # next install is blocked until stale app dirs are removed manually
+        ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
+        Should Be Equal As Integers    ${result.rc}    1
+        Should Contain    ${result.stdout}    ${INCONSISTENT_OUTPUT}
 
-    Run Keyword And Ignore Error    Remove Directory    ${VIRT_FS}/data/mender-app/nginx-demo    recursive=True
-    Run Keyword And Ignore Error    Remove Directory    ${VIRT_FS}/data/mender-app/nginx-demo-previous    recursive=True
+        Run Keyword And Ignore Error    Remove Directory    ${VIRT_FS}/data/mender-app/nginx-demo    recursive=True
+        Run Keyword And Ignore Error    Remove Directory    ${VIRT_FS}/data/mender-app/nginx-demo-previous    recursive=True
 
-    ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
-    Should Be Equal As Integers    ${result.rc}    0
-    Should Contain    ${result.stdout}    Installed and committed.
+        ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
+        Should Be Equal As Integers    ${result.rc}    0
+        Should Contain    ${result.stdout}    Installed and committed.
+    END
 
 Core OS Customization Status Shall Reflect Health Check Result
     ${result}=    Run Process    os-customization-set    status
@@ -184,6 +195,15 @@ Core OS Customization Status Shall Reflect Health Check Result
 
 *** Keywords ***
 Setup Environment
+    ${version}=    Get Environment Variable    MOCK_MENDER_VERSION    4
+    Set Suite Variable    ${MENDER_VERSION}    ${version}
+    IF    '${version}' == '5'
+        Set Suite Variable    ${COMMIT_ROLLBACK_OUTPUT}    Committing failed.\nRolled back.
+        Set Suite Variable    ${INCONSISTENT_OUTPUT}    Update Module does not support rollback. System may be in an inconsistent state.
+    ELSE
+        Set Suite Variable    ${COMMIT_ROLLBACK_OUTPUT}    Installation failed. Rolled back modifications.
+        Set Suite Variable    ${INCONSISTENT_OUTPUT}    Installation failed, and Update Module does not support rollback. System may be in an inconsistent state.
+    END
     ${path}=    Get Environment Variable    PATH
     ${newpath}=    Set Variable    ${EXECDIR}/bin:${path}
     Set Environment Variable    PATH    ${newpath}

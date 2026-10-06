@@ -27,7 +27,19 @@ const (
 
 const defaultIssueContent = "TDX Wayland with XWayland 7.1.0-devel-20260210154127+build.0 (scarthgap) \\n \\l\nModucop-CPU01_Standard-Image_v2.7.0.40ee657.20260218.1208\n"
 
+// InstallPhase records the mock's durable installation checkpoints.
+const (
+	PhaseInstalling     = "ArtifactInstall"
+	PhaseAppStopped     = "app-stopped"
+	PhaseAppRenamed     = "app-renamed"
+	PhaseAppExtracted   = "app-extracted"
+	PhaseAwaitingCommit = "Before_ArtifactCommit_Enter"
+	PhaseCommitting     = "ArtifactCommit_Enter"
+)
+
 type State struct {
+	InstallPhase                    string           `json:"install_phase,omitempty"`
+	ResumeArtifact                  string           `json:"resume_artifact,omitempty"`
 	ActiveRootfs                    string           `json:"active_rootfs"`
 	OldRootfs                       string           `json:"old_rootfs"`
 	NewRootfs                       string           `json:"new_rootfs"`
@@ -293,6 +305,8 @@ func CommitApp(s *State) {
 }
 
 func clearPendingUpdate(s *State) {
+	s.InstallPhase = ""
+	s.ResumeArtifact = ""
 	s.NewRootfs = ""
 	s.OldRootfs = ""
 	s.OldIssuePath = ""
