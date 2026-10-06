@@ -85,6 +85,8 @@ const (
 )
 
 const (
+	ErrInjectPostCommitFailed        = "post-commit-failed"
+	ErrInjectCleanupFailed           = "cleanup-failed"
 	ErrInjectNone                    = ""
 	ErrInjectAfterStopOldContainers  = "after-stop-old-containers"
 	ErrInjectAfterRenameOldAppDir    = "after-renaming-old-application-directory"
@@ -456,7 +458,7 @@ func Stage() (idle, installed, trial string) {
 
 func IsValidErrInjectPoint(v string) bool {
 	switch v {
-	case ErrInjectNone, ErrInjectAfterStopOldContainers, ErrInjectAfterRenameOldAppDir, ErrInjectAfterExtractBeforeStart, ErrInjectDockerComposeUpFailed:
+	case ErrInjectPostCommitFailed, ErrInjectCleanupFailed, ErrInjectNone, ErrInjectAfterStopOldContainers, ErrInjectAfterRenameOldAppDir, ErrInjectAfterExtractBeforeStart, ErrInjectDockerComposeUpFailed:
 		return true
 	default:
 		return false

@@ -84,8 +84,16 @@ without a saved artifact path it cannot be resumed and must be rolled back.
 
 Successful install and commit messages are shared by both profiles. These are
 profiles of the mock's existing command set, not complete Mender clients:
-`--stop-before`, `--reboot-exit-code`, signature enforcement, and
-post-commit/cleanup error injection are not simulated yet.
+`resume --stop-before ArtifactCommit_Enter` keeps a rootfs/customization
+transaction awaiting commit, allowing the server to reboot and run health
+checks. Other stop points, `--reboot-exit-code`, and signature enforcement are
+not simulated yet.
+
+The error injection points `post-commit-failed` and `cleanup-failed` report
+failure after saving the completed transaction. They leave the new rootfs or
+application installed and running, and exit with code 1. These can be used with
+both version profiles to verify the API reports a failed deployment without
+undoing a committed update.
 
 Verify both profiles with `go test ./mocks/...` from the repository root.
 

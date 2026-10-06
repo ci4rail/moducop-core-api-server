@@ -21,8 +21,11 @@ To run the tests,
 ### Testing with Mocks
 For testing the moducop-core-api-server on developer machines and in CI pipelines, there is a mock implementation of the commands used by the server. See mocks/AGENTS.md for details.
 
-* run `make mocks`
-* run `make test-with-mocks`.
+Run `make test-with-mocks` to build the mocks and test the Mender 4 profile.
+For Mender 5, run `MOCK_MENDER_VERSION=5 make test-with-mocks` (or
+`MOCK_MENDER_VERSION=5 make -C tests mock-test`). The test target rebuilds the
+mock binaries before running Robot, so it uses the current implementation.
+See [mocks/AGENTS.md](mocks/AGENTS.md) for supported commands and error injection.
 
 ### Testing with real devices
 

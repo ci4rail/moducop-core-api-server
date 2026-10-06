@@ -80,6 +80,10 @@ func main() {
 		return
 	}
 
+	if len(os.Args) == 2 && os.Args[1] == "--help" {
+		usage()
+		return
+	}
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(2)
@@ -99,11 +103,12 @@ func main() {
 			printRequestError("No such action: resume")
 			os.Exit(1)
 		}
-		if len(os.Args) != 2 {
+		stopBeforeCommit := len(os.Args) == 4 && os.Args[2] == "--stop-before" && os.Args[3] == "ArtifactCommit_Enter"
+		if len(os.Args) != 2 && !stopBeforeCommit {
 			usage()
 			os.Exit(2)
 		}
-		if err := runResume(); err != nil {
+		if err := runResume(stopBeforeCommit); err != nil {
 			os.Exit(commandExitCode(err))
 		}
 	case "commit":
@@ -165,11 +170,11 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  mender-update install <image-file>")
 	fmt.Fprintln(os.Stderr, "  mender-update commit")
 	if menderMajorVersion() == "5" {
-		fmt.Fprintln(os.Stderr, "  mender-update resume")
+		fmt.Fprintln(os.Stderr, "  mender-update resume [--stop-before ArtifactCommit_Enter]")
 	}
 	fmt.Fprintln(os.Stderr, "  mender-update rollback")
 	fmt.Fprintln(os.Stderr, "  mender-update show-issue")
-	fmt.Fprintln(os.Stderr, "  mender-update err-inject <none|after-stop-old-containers|after-renaming-old-application-directory|after-extracting-new-application-before-starting-new-containers|docker-compose-up-failed>")
+	fmt.Fprintln(os.Stderr, "  mender-update err-inject <none|after-stop-old-containers|after-renaming-old-application-directory|after-extracting-new-application-before-starting-new-containers|docker-compose-up-failed|post-commit-failed|cleanup-failed>")
 }
 
 func runInstall(_ context.Context, imagePath string) error {
@@ -405,6 +410,12 @@ func installApp(st *mockmender.State, imagePath string, metadata mockmender.AppM
 		if st.ErrorInjectPoint == mockmender.ErrInjectDockerComposeUpFailed {
 			// docker compose down has already stopped the old rollout. Preserve that
 			// side effect even though the subsequent compose up fails.
+			if menderMajorVersion() == "5" {
+				// A terminal failure without rollback support cleans up the Mender
+				// transaction. Keep the module's inconsistent files for recovery testing.
+				mockmender.CommitApp(st)
+				st.InconsistentApp = project
+			}
 			if err := mockmender.SaveState(*st); err != nil {
 				return err
 			}
@@ -449,14 +460,33 @@ func installApp(st *mockmender.State, imagePath string, metadata mockmender.AppM
 
 	fmt.Println("Update Module doesn't support rollback. Committing immediately.")
 	fmt.Println("Installed and committed.")
-	return nil
+	return postCommitFailure(*st)
 }
 
 func awaitingCommit(phase string) bool {
 	return phase == mockmender.PhaseAwaitingCommit || phase == mockmender.PhaseCommitting
 }
 
-func runResume() error {
+// Inject errors after the transaction is committed and durable: recovery must
+// report the failed step without rolling back or reinstalling the update.
+func postCommitFailure(st mockmender.State) error {
+	switch st.ErrorInjectPoint {
+	case mockmender.ErrInjectPostCommitFailed:
+		if menderMajorVersion() == "5" {
+			fmt.Println("One or more post-commit steps failed.")
+		} else {
+			fmt.Println("Installed, but one or more post-commit steps failed.")
+		}
+		return errors.New("injected post-commit failure")
+	case mockmender.ErrInjectCleanupFailed:
+		fmt.Println("Cleanup failed.")
+		return errors.New("injected cleanup failure")
+	default:
+		return nil
+	}
+}
+
+func runResume(stopBeforeCommit bool) error {
 	st, err := mockmender.LoadState()
 	if err != nil {
 		return err
@@ -466,6 +496,11 @@ func runResume() error {
 		return noUpdate()
 	}
 	if st.InstallPhase == "" || awaitingCommit(st.InstallPhase) {
+		if stopBeforeCommit && st.InstallPhase != mockmender.PhaseCommitting && st.PendingUpdateType != string(mockmender.UpdateTypeApp) {
+			// No new installation work occurred during this invocation, so the
+			// upstream result handler has no operation summary to print.
+			return nil
+		}
 		return runCommit()
 	}
 	switch st.InstallPhase {
@@ -537,7 +572,7 @@ func runCommit() error {
 			return err
 		}
 		fmt.Println("Committed.")
-		return nil
+		return postCommitFailure(st)
 	case installed:
 		switch st.PendingUpdateType {
 		case string(mockmender.UpdateTypeApp):
@@ -547,7 +582,7 @@ func runCommit() error {
 					return err
 				}
 				fmt.Println("Committed.")
-				return nil
+				return postCommitFailure(st)
 			}
 			pendingProject := st.PendingAppProject
 			mockmender.CommitApp(&st)
@@ -572,7 +607,7 @@ func runCommit() error {
 				return err
 			}
 			fmt.Println("Committed.")
-			return nil
+			return postCommitFailure(st)
 		default:
 			mockmender.RollbackImmediate(&st)
 			if err := mockmender.SaveState(st); err != nil {

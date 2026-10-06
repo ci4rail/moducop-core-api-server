@@ -68,6 +68,11 @@ func TestVersionProfiles(t *testing.T) {
 				rollbackText = "Committing failed.\nRolled back.\n"
 			}
 			run(0, versionText, "", "--version")
+			if v5 {
+				run(0, "", "mender-update resume", "--help")
+			} else {
+				run(0, "", "mender-update commit", "--help")
+			}
 			run(idleCode, idleText, "", "commit")
 			if v5 {
 				run(2, "No update in progress.", "", "resume")
@@ -91,6 +96,14 @@ func TestVersionProfiles(t *testing.T) {
 				t.Fatal(err)
 			}
 			if v5 {
+				run(0, "", "", "resume", "--stop-before", "ArtifactCommit_Enter")
+				after, err := mockmender.LoadState()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if after.Stage != installed {
+					t.Fatal("stop-before committed rootfs")
+				}
 				run(1, "", "Update already in progress.", "install", artifact)
 			} else {
 				run(1, "Update already in progress.", "", "install", artifact)
@@ -192,6 +205,26 @@ func TestVersionProfiles(t *testing.T) {
 
 			} else {
 				run(0, "Committed.\nInstallation failed, and Update Module does not support rollback.", "", "commit")
+			}
+
+			for _, point := range []string{mockmender.ErrInjectPostCommitFailed, mockmender.ErrInjectCleanupFailed} {
+				st, err := mockmender.LoadState()
+				if err != nil {
+					t.Fatal(err)
+				}
+				st.Stage, st.PendingUpdateType, st.NewRootfs, st.ErrorInjectPoint = trial, string(mockmender.UpdateTypeRootfs), "durable-rootfs", point
+				st.InstallPhase = mockmender.PhaseAwaitingCommit
+				if err := mockmender.SaveState(st); err != nil {
+					t.Fatal(err)
+				}
+				run(1, "Committed.", "", "commit")
+				st, err = mockmender.LoadState()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if st.Stage != idle || st.CommittedRootfs != "durable-rootfs" {
+					t.Fatalf("post-commit failure undid update: %+v", st)
+				}
 			}
 
 		})

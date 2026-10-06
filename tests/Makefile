@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 mock-test:
+	$(MAKE) -C ../mocks mocks
 	robot -d results -X -i mender -i io4edge-mock -i hardware testcases/
 
 real-test:
