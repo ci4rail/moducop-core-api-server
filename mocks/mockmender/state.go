@@ -224,7 +224,7 @@ func EvaluateCustomizationHealth(s *State, passed bool) {
 }
 
 func CommitCustomization(s *State) {
-	clearCustomizationMenderTransaction(s)
+	clearPendingUpdate(s)
 }
 
 func RollbackCustomization(s *State) {
@@ -233,17 +233,7 @@ func RollbackCustomization(s *State) {
 		s.CandidateCustomizationVersion = ""
 		s.CustomizationCandidateState = "rolled-back"
 	}
-	clearCustomizationMenderTransaction(s)
-}
-
-func clearCustomizationMenderTransaction(s *State) {
-	s.PendingImage = ""
-	s.PendingUpdateType = string(UpdateTypeNone)
-	s.PendingCustomizationVersion = ""
-	s.CustomizationHealthExpectedPass = false
-	s.CustomizationHealthEvaluated = false
-	s.CustomizationHealthPassed = false
-	s.Stage = stageIdle
+	clearPendingUpdate(s)
 }
 
 func TrialBoot(s *State) {

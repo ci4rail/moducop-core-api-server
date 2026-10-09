@@ -7,6 +7,9 @@
 package cpumanager
 
 import (
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -120,5 +123,19 @@ func TestNonSecureBootIssueVersions(t *testing.T) {
 		if _, _, err := coreOsVersionFromIssueLine(line); err == nil {
 			t.Fatalf("accepted %q", line)
 		}
+	}
+}
+
+func TestListApplicationsExcludesTransactions(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("MOCK_MENDER_STATE_DIR", root)
+	for _, name := range []string{"demo", "other", ".transactions", "demo-previous", "demo-last"} {
+		if err := os.MkdirAll(filepath.Join(root, "fs/data/mender-app", name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	apps, err := listApplicationsFromTargetFS()
+	if err != nil || !reflect.DeepEqual(apps, []string{"demo", "other"}) {
+		t.Fatalf("apps %v, error %v", apps, err)
 	}
 }

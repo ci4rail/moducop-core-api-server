@@ -134,3 +134,28 @@ func tarBytes(t *testing.T, files map[string]string) []byte {
 	}
 	return buf.Bytes()
 }
+
+func TestCustomizationCompletionClearsResumeCheckpoint(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		finish func(*State)
+	}{
+		{"commit", CommitCustomization},
+		{"rollback", RollbackCustomization},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := State{ActiveCustomizationVersion: "known-good"}
+			SetInstalledCustomization(&s, "candidate.mender", "candidate", true)
+			s.InstallPhase = PhaseAwaitingCommit
+			s.ResumeArtifact = "/tmp/candidate.mender"
+			tc.finish(&s)
+			if s.Stage != stageIdle || s.PendingUpdateType != string(UpdateTypeNone) ||
+				s.InstallPhase != "" || s.ResumeArtifact != "" {
+				t.Fatalf("completed customization retained transaction: %+v", s)
+			}
+			if s.ActiveCustomizationVersion != "known-good" {
+				t.Fatalf("active customization changed: %+v", s)
+			}
+		})
+	}
+}

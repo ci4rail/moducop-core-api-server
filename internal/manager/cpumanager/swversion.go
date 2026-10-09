@@ -133,7 +133,7 @@ func listApplicationsFromTargetFS() ([]string, error) {
 	}
 	var apps []string
 	for _, entry := range entries {
-		if entry.IsDir() &&
+		if entry.IsDir() && entry.Name() != ".transactions" &&
 			!strings.HasSuffix(entry.Name(), "-previous") &&
 			!strings.HasSuffix(entry.Name(), "-last") {
 			apps = append(apps, entry.Name())

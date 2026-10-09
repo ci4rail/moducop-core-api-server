@@ -16,6 +16,18 @@ Committed Update Shall Survive Subsequent Failure
     IF    '${SIMULATION_MODE}' != 'true'
         SKIP    Requires mock error injection
     END
+    # Each failure scenario must deploy a version different from the active one.
+    Clear Error Injection
+    ${baseline}=    Set Variable If    '${version}' == 'a895c3c'    8f249b9    a895c3c
+    ${current}=    GET    ${API_URL}/software/application/nginx-demo    expected_status=any
+    IF    ${current.status_code} != 200 or $current.json()['current']['version'] != $baseline
+        ${response}=    Load Artifact    ${API_URL}/software/application/nginx-demo    ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-${baseline}.mender
+        Should Be Equal As Integers    ${response.status_code}    202
+        ${status}=    Wait for Update    ${API_URL}/software/application/nginx-demo
+        Check Deploy Status from Response    ${status}    success
+    END
+    Check Current Version    ${API_URL}/software/application/nginx-demo    nginx-demo    ${baseline}
+
     ${result}=    Run Process    mender-update    err-inject    ${point}
     Should Be Equal As Integers    ${result.rc}    0
     TRY

@@ -9,10 +9,12 @@ package cpumanager
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ci4rail/moducop-core-api-server/internal/loglite"
 )
@@ -181,7 +183,7 @@ func TestMenderCommandResults(t *testing.T) {
 		{"cleanup despite zero exit", menderCommandCommit, "Committed.\nCleanup failed.\n", "", 0, menderUpdateResultCommittedWithErrors},
 		{"optional reboot exit", menderCommandInstall, "Installed, but not committed.\nAt least one payload requested a reboot of the device it updated.\n", "", 4, menderUpdateResultInstalledButNotCommited},
 		{"committed inconsistent failure stays committed", menderCommandCommit, "Committed.\nSystem may be in an inconsistent state.\n", "", 1, menderUpdateResultCommittedWithErrors},
-		{"legacy interrupted commit", menderCommandCommit, "Committed.\nInstallation failed, and Update Module does not support rollback. System may be in an inconsistent state.\n", "", 0, menderUpdateResultInstallationFailedSystemInconsistent},
+		{"committed inconsistent summary", menderCommandCommit, "Committed.\nInstallation failed, and Update Module does not support rollback. System may be in an inconsistent state.\n", "", 0, menderUpdateResultCommittedWithErrors},
 		{"auto commit reboot exit", menderCommandInstall, "Installed and committed.\nAt least one payload requested a reboot of the device it updated.\n", "", 4, menderUpdateResultInstalledAndCommited},
 		{"signal death", menderCommandInstall, "Installed, but not committed.\n", "", -1, menderUpdateResultInstallationFailedGeneric},
 	}
@@ -226,30 +228,6 @@ func TestRecoveryOperationsAreBounded(t *testing.T) {
 	manager.HandleEvent(menderEvent{Code: menderEventCommitFinished, UpdateResult: menderUpdateResultWrongState})
 	if len(events) != 1 || events[0].Success || state.State != menderStateIdle {
 		t.Fatalf("events %+v, state %+v", events, state)
-	}
-}
-
-func TestResumeCapabilityDetection(t *testing.T) {
-	for _, tc := range []struct {
-		name, help string
-		supported  bool
-	}{
-		{"mender4", "install commit rollback", false},
-		{"mender5", "install resume commit rollback", true},
-		{"substring is insufficient", "cannot-resume", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			script := "#!/bin/sh\n[ \"$1\" = --help ] || exit 1\nprintf '%s\\n' '" + tc.help + "' >&2\n"
-			if err := os.WriteFile(filepath.Join(dir, "mender-update"), []byte(script), 0755); err != nil {
-				t.Fatal(err)
-			}
-			t.Setenv("PATH", dir)
-			manager := &menderManager{logger: loglite.New("test", &bytes.Buffer{}, loglite.Debug)}
-			if got := manager.supportsResume(); got != tc.supported {
-				t.Fatalf("got %v, want %v", got, tc.supported)
-			}
-		})
 	}
 }
 
@@ -324,5 +302,98 @@ func TestSilentResumeRequiresExplicitCommitStop(t *testing.T) {
 	got = manager.menderUpdateResultFromOutput(menderCommandResume, "", "", 0, nil)
 	if got != menderUpdateResultInstallationFailedGeneric {
 		t.Fatalf("silent unqualified resume: %s", got)
+	}
+}
+
+func TestApplicationCommitTimeout(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  time.Duration
+	}{{"", 5 * time.Minute}, {"90s", 90 * time.Second}, {"invalid", 5 * time.Minute}, {"0s", 5 * time.Minute}, {"-1s", 5 * time.Minute}} {
+		t.Run(tc.value, func(t *testing.T) {
+			t.Setenv("MENDER_APPLICATION_COMMIT_TIMEOUT", tc.value)
+			m := &menderManager{logger: loglite.New("test", &bytes.Buffer{}, loglite.Debug), state: &menderPersistentState{CurrentEntityType: entityTypeApplication}}
+			if got := m.commitCommandTimeout(); got != tc.want {
+				t.Fatalf("timeout %s, want %s", got, tc.want)
+			}
+			m.state.CurrentEntityType = entityTypeCoreOs
+			if got := m.commitCommandTimeout(); got != commitTimeout {
+				t.Fatalf("rootfs timeout %s", got)
+			}
+		})
+	}
+}
+
+//nolint:cyclop // Table-driven lifecycle tests verify terminal results and preservation of every recovery file.
+func TestApplicationLifecycle(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		state   menderState
+		event   menderEvent
+		script  string
+		success bool
+	}{
+		{"pending install commits", menderStateInstalling, menderEvent{Code: menderEventInstallFinished, UpdateResult: menderUpdateResultInstalledButNotCommited}, "[ \"$1\" = commit ] || exit 10\nprintf 'Committed.\\n'", true},
+		{"commit health check rolls back", menderStateInstalling, menderEvent{Code: menderEventInstallFinished, UpdateResult: menderUpdateResultInstalledButNotCommited}, "[ \"$1\" = commit ] || exit 10\nprintf 'Committing failed.\\nRolled back.\\n'\nexit 1", false},
+		{"commit health and rollback fail", menderStateInstalling, menderEvent{Code: menderEventInstallFinished, UpdateResult: menderUpdateResultInstalledButNotCommited}, "case \"$1\" in commit|rollback) printf 'System may be in an inconsistent state.\\n'; exit 1;; *) exit 10;; esac", false},
+		{"health failure rolled back", menderStateCommitting, menderEvent{Code: menderEventCommitFinished, UpdateResult: menderUpdateResultInstallationFailedRolledBack}, "exit 10", false},
+		{"failed commit rolls back", menderStateCommitting, menderEvent{Code: menderEventCommitFinished, UpdateResult: menderUpdateResultInstallationFailedGeneric}, "[ \"$1\" = rollback ] || exit 10\nprintf 'Rolled back.\\n'", false},
+		{"failed rollback preserves files", menderStateInstalling, menderEvent{Code: menderEventInstallFinished, UpdateResult: menderUpdateResultInstallationFailedSystemInconsistent}, "[ \"$1\" = rollback ] || exit 10\nprintf 'System may be in an inconsistent state.\\n'\nexit 1", false},
+		{"interrupted install resumes", menderStateInstalling, menderEvent{Code: menderEventRestarted}, "[ \"$1\" = resume ] || exit 10\nprintf 'Installed and committed.\\n'", true},
+		{"interrupted recovery resumes", menderStateRecoverInstallCommitting, menderEvent{Code: menderEventRestarted}, "[ \"$1\" = resume ] || exit 10\nprintf 'Installed and committed.\\n'", true},
+		{"interrupted commit resumes", menderStateCommitting, menderEvent{Code: menderEventRestarted}, "[ \"$1\" = resume ] || exit 10\nprintf 'Committed.\\n'", true},
+		{"interrupted rollback", menderStateRollingBackApplication, menderEvent{Code: menderEventRestarted}, "[ \"$1\" = rollback ] || exit 10\nprintf 'Rolled back.\\n'", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("MOCK_MENDER_STATE_DIR", root)
+			t.Setenv("PATH", root)
+			if err := os.WriteFile(filepath.Join(root, "mender-update"), []byte("#!/bin/sh\n"+tc.script+"\n"), 0755); err != nil {
+				t.Fatal(err)
+			}
+			files := []string{"demo/manifests/.env", "demo-previous/snapshot", "demo-last/snapshot", ".transactions/demo/snapshot"}
+			for _, file := range files {
+				path := filepath.Join(root, "fs/data/mender-app", file)
+				if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte("preserve"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			events := make(chan menderEvent, 10)
+			state := &menderPersistentState{State: tc.state, CurrentEntityType: entityTypeApplication, CurrentEntityName: "demo"}
+			m := &menderManager{logger: loglite.New("test", io.Discard, loglite.Debug), state: state, saveState: func() {}, emitEvent: func(e menderEvent) { events <- e }}
+			m.HandleEvent(tc.event)
+			deadline := time.After(3 * time.Second)
+		loop:
+			for {
+				select {
+				case e := <-events:
+					if e.Code == menderEventJobFinished {
+						if e.Success != tc.success {
+							t.Fatalf("result %+v", e)
+						}
+						break loop
+					}
+					// A wrong command must fail the test, even when job failure is expected.
+					if strings.Contains(e.Message, "exit 10,") {
+						t.Fatalf("unexpected command: %+v", e)
+					}
+					m.HandleEvent(e)
+				case <-deadline:
+					t.Fatal("no terminal event")
+				}
+			}
+			if state.State != menderStateIdle {
+				t.Fatalf("state %v", state.State)
+			}
+			for _, file := range files {
+				data, err := os.ReadFile(filepath.Join(root, "fs/data/mender-app", file))
+				if err != nil || string(data) != "preserve" {
+					t.Fatalf("file %s changed: %q %v", file, data, err)
+				}
+			}
+		})
 	}
 }

@@ -35,14 +35,14 @@ stateDiagram-v2
 
     Installing --> RecoverInstallCommitting: commit or rollback pending
     RecoverInstallCommitting --> RecoverInstallCommitting: pending or wrong state (bounded)
-    RecoverInstallCommitting --> Installing: Mender 4 recovery commit succeeded
     RecoverInstallCommitting --> Rebooting: Mender 5 resume finished rootfs/customization install
     RecoverInstallCommitting --> Idle: Mender 5 resume committed application
 
-    Installing --> RecoverInstallClearApp: app state inconsistent
-    RecoverInstallCommitting --> RecoverInstallClearApp: app state inconsistent
-    RecoverInstallClearApp --> RecoverInstallClearApp: server restarted
-    RecoverInstallClearApp --> Installing: app directories cleared
+    Installing --> RollingBackApplication: application inconsistent or interrupted failure
+    Committing --> RollingBackApplication: commit failed without confirmed rollback
+    RecoverInstallCommitting --> RollingBackApplication: application inconsistent
+    RollingBackApplication --> RollingBackApplication: server restarted
+    RollingBackApplication --> Idle: rollback finished (job failed)
 
     Installing --> Idle: unrecoverable install failure
     RecoverInstallCommitting --> Idle: unrecoverable recovery failure
@@ -53,11 +53,11 @@ stateDiagram-v2
 
 | State at server restart | Action |
 | --- | --- |
-| `Installing` | Probe `mender-update --help`. Use `resume` when advertised; otherwise restart `install`. |
+| `Installing` | Use `mender-update resume`. |
 | `Rebooting` | Retry the reboot, unless the boot ID changed; then continue with commit. |
-| `Committing` | Retry commit. |
-| `RecoverInstallCommitting` | Resume on Mender 5, or retry the recovery commit on Mender 4, within the persistent recovery limit. |
-| `RecoverInstallClearApp` | Clear the application directories again. |
+| `Committing` | Resume the interrupted commit. |
+| `RecoverInstallCommitting` | Resume within the persistent recovery limit. |
+| `RollingBackApplication` | Retry Mender rollback, preserving application files. |
 
 For an application update, one recovery-triggered re-install is permitted. The
 recovery-retry count is persistent. If another recovery would be required, the
@@ -65,12 +65,11 @@ manager emits `JobFinished(failure)` and returns to `Idle`. This prevents a
 deterministic package error, such as a missing Docker Compose bind-mount source,
 from being retried forever.
 
-## Mender 4 and 5 result handling
+## Mender 5 result handling
 
 Results combine the command (`install`, `resume`, `commit`, or `rollback`), stdout summaries,
 stderr diagnostics, process exit status, and execution errors. Success summaries
-must appear as complete stdout lines. Mender 4's combined failure/disposition
-sentences and Mender 5's separate lines are both accepted. Streaming, installing,
+must appear as complete stdout lines. Failure and disposition may appear on separate lines. Streaming, installing,
 and committing failures retain the system disposition: unchanged, rolled back,
 or inconsistent. A successful-looking installation summary with a failed exit
 status is not sufficient to continue to reboot or commit.
@@ -83,7 +82,7 @@ customization health-check steps before commit. The mock implements this stop
 point for these payload types. A resume paused before commit can succeed without
 printing an operation summary when the installation was already complete. Such
 a silent result is accepted only for the explicit commit stop point and a
-successful process exit. Mender 4 keeps its commit/clear/reinstall recovery.
+successful process exit.
 
 Two commit/resume recovery operations are permitted per job; the counter survives
 server restarts. This is separate from the existing single application
@@ -100,5 +99,21 @@ fails the job.
 An update that was committed but has post-commit or cleanup errors stays
 installed. Its deployment status is `failure`, with a diagnostic saying it was
 committed and including the failed step. The manager does not clear application
-directories or reinstall it. This applies to both Mender 4's post-commit summary
-and Mender 5's committed summary followed by post-commit/cleanup failure lines.
+directories or reinstall it. Committed summaries followed by post-commit/cleanup failure lines are treated as failures.
+
+
+## Application health and rollback
+
+Application commit and rollback commands default to a five-minute timeout.
+Set `MENDER_APPLICATION_COMMIT_TIMEOUT` to a positive Go duration (for example
+`10m`) to cover readiness checks, rollback and cleanup. Invalid or nonpositive
+values log a warning and use the default. Other payload commit timeouts remain
+30 seconds.
+
+Pending application installs are committed so the module can run health checks.
+Confirmed automatic rollback fails the job without reinstalling. An interrupted
+or inconsistent failure invokes Mender rollback. Rollback failure is reported
+and manifests, snapshots and transaction files are preserved for recovery.
+The server never deletes application directories. Old persisted
+`recover_install_clear_app` states migrate to application rollback.
+The internal `.transactions` directory is excluded from application listing.

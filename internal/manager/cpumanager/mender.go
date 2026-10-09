@@ -16,7 +16,6 @@ import (
 
 	"github.com/ci4rail/moducop-core-api-server/internal/execcli"
 	"github.com/ci4rail/moducop-core-api-server/internal/loglite"
-	"github.com/ci4rail/moducop-core-api-server/internal/prefixfs"
 )
 
 type menderState int
@@ -27,9 +26,9 @@ const (
 	menderStateRebooting
 	menderStateCommitting
 	menderStateRecoverInstallCommitting
-	menderStateRecoverInstallClearApp
 	menderStateVerifyingCustomization
 	menderStateRollingBackCustomization
+	menderStateRollingBackApplication
 )
 
 type menderEventCode int
@@ -99,6 +98,7 @@ const (
 	maxRecoveryOperations           = 2
 	rebootTimeout                   = 30 * time.Second
 	commitTimeout                   = 30 * time.Second
+	defaultApplicationCommitTimeout = 5 * time.Minute
 	customizationStatusTimeout      = 10 * time.Second
 	customizationStatusPollInterval = time.Second
 	customizationStatusMaxWait      = 5 * time.Minute
@@ -131,6 +131,42 @@ func newMenderManager(logger *loglite.Logger, state *menderPersistentState, emit
 	return m
 }
 
+// Application health checks, rollback and cleanup share this command budget.
+func (m *menderManager) commitCommandTimeout() time.Duration {
+	if m.state.CurrentEntityType != entityTypeApplication {
+		return commitTimeout
+	}
+	if value := os.Getenv("MENDER_APPLICATION_COMMIT_TIMEOUT"); value != "" {
+		timeout, err := time.ParseDuration(value)
+		if err == nil && timeout > 0 {
+			return timeout
+		}
+		m.logger.Warnf("Invalid MENDER_APPLICATION_COMMIT_TIMEOUT %q; using %s", value, defaultApplicationCommitTimeout)
+	}
+	return defaultApplicationCommitTimeout
+}
+
+func (m *menderManager) startApplicationRollback() {
+	m.state.State = menderStateRollingBackApplication
+	m.runMenderRollbackInBackGround(m.commitCommandTimeout())
+}
+
+func (m *menderManager) handleRollingBackApplicationEvent(event menderEvent) {
+	switch event.Code {
+	case menderEventRestarted:
+		m.startApplicationRollback()
+	case menderEventRollbackFinished:
+		if event.UpdateResult == menderUpdateResultRolledBack ||
+			event.UpdateResult == menderUpdateResultInstallationFailedRolledBack {
+			m.emitJobFinished(false, "Application update failed; Mender rolled back the update")
+		} else {
+			m.emitJobFinished(false, "Application update failed; Mender rollback could not be confirmed; application manifests and snapshots preserved: "+event.Message)
+		}
+	case menderEventNone, menderEventInstallFinished, menderEventRebootFinished, menderEventCommitFinished, menderEventRecoverFinished, menderEventCustomizationVerified, menderEventJobFinished:
+		m.logger.Warnf("Unexpected event while rolling back application: %v", event)
+	}
+}
+
 func (m *menderManager) StartUpdateJob(entityType entityType, artifact string, entityName string, timeout time.Duration) error {
 	if m.state.State != menderStateIdle {
 		return ErrMenderBusy
@@ -159,21 +195,6 @@ func (m *menderManager) runMenderCommand(command string, timeout time.Duration, 
 	m.emitEvent(event)
 }
 
-// Check the installed CLI rather than guessing capabilities from its version.
-func (m *menderManager) supportsResume() bool {
-	stdout, stderr, _, err := execcli.RunCommandWithLogger("mender-update", commitTimeout, m.logger, "--help")
-	if err != nil {
-		m.logger.Warnf("Could not detect Mender resume support: %v", err)
-		return false
-	}
-	for _, field := range strings.Fields(stdout + " " + stderr) {
-		if field == menderCommandResume {
-			return true
-		}
-	}
-	return false
-}
-
 // A resumed rootfs/customization install must still pass through our reboot
 // and health-check steps before Mender commits it.
 func (m *menderManager) resumeInstallArgs() []string {
@@ -185,15 +206,7 @@ func (m *menderManager) resumeInstallArgs() []string {
 
 func (m *menderManager) runInterruptedInstallInBackground() {
 	m.saveState()
-	artifact := m.state.CurrentArtifact
-	resumeArgs := m.resumeInstallArgs()
-	go func() {
-		if m.supportsResume() {
-			m.runMenderCommand(menderCommandResume, updateTimeout, menderEventInstallFinished, resumeArgs...)
-		} else {
-			m.runMenderCommand(menderCommandInstall, updateTimeout, menderEventInstallFinished, artifact)
-		}
-	}()
+	go m.runMenderCommand(menderCommandResume, updateTimeout, menderEventInstallFinished, m.resumeInstallArgs()...)
 }
 
 // reserveRecoveryAttempt records a recovery-triggered application re-install.
@@ -275,7 +288,7 @@ func menderUpdateResultIsSuccess(result menderUpdateResult) bool {
 }
 
 // Classify terminal CLI summaries, keeping diagnostics separate from success lines.
-// Mender 4 combines failure/disposition text; Mender 5 prints separate lines.
+// Mender 5 prints failure and disposition on separate lines.
 //
 //nolint:cyclop // Ordered command and disposition checks keep committed failures out of destructive recovery.
 func (m *menderManager) menderUpdateResultFromOutput(command, stdout, stderr string, exitCode int, err error, args ...string) menderUpdateResult {
@@ -302,13 +315,8 @@ func (m *menderManager) menderUpdateResultFromOutput(command, stdout, stderr str
 	rebootRequested := (command == menderCommandInstall || command == menderCommandResume) && exitCode == 4 &&
 		contains("At least one payload requested a reboot of the device it updated.")
 	committed := menderCommittedSummary(stdout)
-	// Mender 4's mock recovery can print Committed followed by an inconsistent
-	// system summary. Preserve that legacy recovery signal; an explicit post-commit
-	// or cleanup failure instead means the update must never be reinstalled.
 	postCommitFailure := contains("post-commit steps failed.") || contains("Cleanup failed.")
-	legacyInconsistentCommit := command == menderCommandCommit && exitCode == 0 && err == nil &&
-		contains("Installation failed, and Update Module does not support rollback. System may be in an inconsistent state.")
-	if committed && !legacyInconsistentCommit && (postCommitFailure ||
+	if committed && (postCommitFailure ||
 		((exitCode != 0 || err != nil) && !rebootRequested) || contains("System may be in an inconsistent state.")) {
 		return menderUpdateResultCommittedWithErrors
 	}
@@ -431,10 +439,10 @@ func (m *menderManager) HandleEvent(event menderEvent) {
 		m.handleCommittingEvent(event)
 	case menderStateRecoverInstallCommitting:
 		m.handleRecoverInstallCommittingEvent(event)
-	case menderStateRecoverInstallClearApp:
-		m.handleRecoverInstallClearAppEvent(event)
 	case menderStateVerifyingCustomization:
 		m.handleVerifyingCustomizationEvent(event)
+	case menderStateRollingBackApplication:
+		m.handleRollingBackApplicationEvent(event)
 	case menderStateRollingBackCustomization:
 		m.handleRollingBackCustomizationEvent(event)
 	default:
@@ -487,13 +495,17 @@ func (m *menderManager) runMenderRecoveryInstallInBackGround() {
 }
 
 func (m *menderManager) handleInstallFinished(event menderEvent) {
+	if m.state.CurrentEntityType == entityTypeApplication && event.UpdateResult == menderUpdateResultInstallationFailedGeneric {
+		m.startApplicationRollback()
+		return
+	}
 	switch event.UpdateResult {
 	case menderUpdateResultInstalledButNotCommited:
 		m.startPostInstallStep()
 	case menderUpdateResultInstalledAndCommited, menderUpdateResultCommited:
 		m.emitJobFinished(true, "")
 	case menderUpdateResultInstallationFailedSystemInconsistent:
-		m.maybeClearAppDir()
+		m.maybeRecoverApplication()
 	case menderUpdateResultWrongState, menderUpdateResultInstallationFailedPleaseCommitOrRollback,
 		menderUpdateResultInstallationFailedUpdateAlreadyInProgress:
 		m.logger.Warnf("Mender reported inconsistent system or pending commit/rollback after installation. Starting recovery install.")
@@ -513,7 +525,7 @@ func (m *menderManager) startPostInstallStep() {
 		return
 	}
 	m.state.State = menderStateCommitting
-	m.runMenderCommitInBackGround(commitTimeout)
+	m.runMenderCommitInBackGround(m.commitCommandTimeout())
 }
 
 func (m *menderManager) handleRebootingEvent(event menderEvent) {
@@ -528,7 +540,7 @@ func (m *menderManager) handleRebootingEvent(event menderEvent) {
 				m.runCustomizationStatusVerificationInBackground()
 			} else {
 				m.state.State = menderStateCommitting
-				m.runMenderCommitInBackGround(commitTimeout)
+				m.runMenderCommitInBackGround(m.commitCommandTimeout())
 			}
 		} else {
 			m.logger.Warnf("Reboot failed during installation. Starting recovery install.")
@@ -546,7 +558,7 @@ func (m *menderManager) handleVerifyingCustomizationEvent(event menderEvent) {
 	case menderEventCustomizationVerified:
 		if event.Success {
 			m.state.State = menderStateCommitting
-			m.runMenderCommitInBackGround(commitTimeout)
+			m.runMenderCommitInBackGround(m.commitCommandTimeout())
 			return
 		}
 		m.state.State = menderStateRollingBackCustomization
@@ -571,13 +583,26 @@ func (m *menderManager) handleRollingBackCustomizationEvent(event menderEvent) {
 	}
 }
 
+//nolint:cyclop // Distinguish pending, committed, rolled back and interrupted command outcomes.
 func (m *menderManager) handleCommittingEvent(event menderEvent) {
 	switch event.Code {
 	case menderEventRestarted:
-		m.logger.Infof("System reboot detected. Retrying commit to complete installation.")
-		m.runMenderCommitInBackGround(commitTimeout)
+		m.logger.Infof("Resuming interrupted commit")
+		m.saveState()
+		go m.runMenderCommand(menderCommandResume, m.commitCommandTimeout(), menderEventCommitFinished)
 
 	case menderEventCommitFinished:
+		if event.UpdateResult == menderUpdateResultInstalledButNotCommited {
+			m.runMenderCommitInBackGround(m.commitCommandTimeout())
+			return
+		}
+		if m.state.CurrentEntityType == entityTypeApplication &&
+			(event.UpdateResult == menderUpdateResultInstallationFailedGeneric ||
+				event.UpdateResult == menderUpdateResultInstallationFailedSystemInconsistent ||
+				event.UpdateResult == menderUpdateResultInstallationFailedPleaseCommitOrRollback) {
+			m.startApplicationRollback()
+			return
+		}
 		if event.UpdateResult == menderUpdateResultNoUpdateInProgress && m.currentArtifactIsDeployed() {
 			m.emitJobFinished(true, "")
 			return
@@ -590,7 +615,7 @@ func (m *menderManager) handleCommittingEvent(event menderEvent) {
 			m.emitJobFinished(false, "Mender committed the update, but subsequent steps failed: "+event.Message)
 			return
 		}
-		if event.Success {
+		if event.UpdateResult == menderUpdateResultCommited || event.UpdateResult == menderUpdateResultInstalledAndCommited {
 			m.emitJobFinished(true, "")
 		} else {
 			m.emitJobFinished(false, fmt.Sprintf("Mender commit failed: %s; %s", event.UpdateResult, event.Message))
@@ -606,52 +631,10 @@ func (m *menderManager) handleRecoverInstallCommittingEvent(event menderEvent) {
 		m.logger.Infof("Mender manager restarted while in recover install. Restarting recovery install")
 		m.startRecoverInstall()
 	case menderEventCommitFinished:
-		if event.Command == menderCommandResume {
-			m.state.State = menderStateInstalling
-			m.handleInstallingEvent(menderEvent{Code: menderEventInstallFinished, Command: menderCommandResume, UpdateResult: event.UpdateResult, Success: event.Success, Message: event.Message})
-			return
-		}
-		m.handleRecoveryCommitResult(event)
+		m.state.State = menderStateInstalling
+		m.handleInstallingEvent(menderEvent{Code: menderEventInstallFinished, Command: menderCommandResume, UpdateResult: event.UpdateResult, Success: event.Success, Message: event.Message})
 	case menderEventNone, menderEventInstallFinished, menderEventRebootFinished, menderEventJobFinished, menderEventRecoverFinished, menderEventCustomizationVerified, menderEventRollbackFinished:
 		m.logger.Warnf("Received unexpected mender event code %s in recover install state: %v", event.Code, event)
-	}
-}
-
-func (m *menderManager) handleRecoveryCommitResult(event menderEvent) {
-	switch event.UpdateResult {
-	case menderUpdateResultCommittedWithErrors:
-		m.emitJobFinished(false, "Mender committed the update, but subsequent steps failed: "+event.Message)
-	case menderUpdateResultNoUpdateInProgress:
-		if m.currentArtifactIsDeployed() {
-			m.emitJobFinished(true, "")
-		} else {
-			m.emitRecoverfinished(false, "Mender has no pending update and the requested version is not deployed")
-		}
-	case menderUpdateResultInstalledAndCommited, menderUpdateResultCommited:
-		m.state.State = menderStateInstalling
-		m.emitRecoverfinished(true, "")
-	case menderUpdateResultWrongState, menderUpdateResultInstallationFailedPleaseCommitOrRollback:
-		m.logger.Warnf("Recovery commit failed with pending commit/rollback. Starting recovery install again.")
-		m.startRecoverInstall()
-	case menderUpdateResultInstallationFailedSystemInconsistent:
-		m.maybeClearAppDir()
-	case menderUpdateResultRolledBack, menderUpdateResultInstallationFailedSystemNotModified,
-		menderUpdateResultInstallationFailedRolledBack,
-		menderUpdateResultInstallationFailedUpdateAlreadyInProgress,
-		menderUpdateResultInstalledButNotCommited,
-		menderUpdateResultInstallationFailedGeneric:
-		m.logger.Warnf("Received unexpected mender update result for failed commit in recovery install: %v", event.UpdateResult)
-		m.emitRecoverfinished(false, fmt.Sprintf("Unexpected mender update result during recovery commit: %s", event.UpdateResult))
-	}
-}
-
-func (m *menderManager) handleRecoverInstallClearAppEvent(event menderEvent) {
-	switch event.Code {
-	case menderEventRestarted:
-		m.logger.Infof("Mender manager restarted while in recover install clear app. Restarting recovery install")
-		m.clearAppDir()
-	case menderEventNone, menderEventRecoverFinished, menderEventCommitFinished, menderEventInstallFinished, menderEventRebootFinished, menderEventJobFinished, menderEventCustomizationVerified, menderEventRollbackFinished:
-		m.logger.Warnf("Received unexpected mender event code %s in recover install clear app state: %v", event.Code, event)
 	}
 }
 
@@ -693,16 +676,6 @@ func (m *menderManager) emitRebootFinished(message string, err error) {
 	m.emitEvent(me)
 }
 
-func (m *menderManager) emitRecoverfinished(success bool, message string) {
-	me := menderEvent{
-		Code:    menderEventRecoverFinished,
-		Success: success,
-		Message: message,
-	}
-	m.logger.Infof("Recovery install finished: %v", me)
-	m.emitEvent(me)
-}
-
 func (m *menderManager) startRecoverInstall() {
 	if m.state.RecoveryOperations >= maxRecoveryOperations {
 		m.emitJobFinished(false, "Mender recovery retry limit reached")
@@ -711,40 +684,15 @@ func (m *menderManager) startRecoverInstall() {
 	m.state.RecoveryOperations++
 	m.state.State = menderStateRecoverInstallCommitting
 	m.saveState()
-	resumeArgs := m.resumeInstallArgs()
-	go func() {
-		if m.supportsResume() {
-			// The actor handles the result in the persisted recovery state.
-			m.runMenderCommand(menderCommandResume, updateTimeout, menderEventCommitFinished, resumeArgs...)
-		} else {
-			m.runMenderCommand(menderCommandCommit, commitTimeout, menderEventCommitFinished)
-		}
-	}()
+	go m.runMenderCommand(menderCommandResume, updateTimeout, menderEventCommitFinished, m.resumeInstallArgs()...)
 }
 
-func (m *menderManager) maybeClearAppDir() {
+func (m *menderManager) maybeRecoverApplication() {
 	if m.state.CurrentEntityType == entityTypeApplication {
-		m.clearAppDir()
+		m.startApplicationRollback()
 	} else {
-		m.emitRecoverfinished(false, "system in inconsistent state")
+		m.emitJobFinished(false, "system in inconsistent state")
 	}
-}
-
-func (m *menderManager) clearAppDir() {
-	m.logger.Infof("Clearing app directory for app %s as part of recovery install", m.state.CurrentEntityName)
-	m.state.State = menderStateRecoverInstallClearApp
-	appName := m.state.CurrentEntityName
-	appDirExtensions := []string{"", "-previous", "-last"}
-
-	for _, ext := range appDirExtensions {
-		appDir := fmt.Sprintf("%s/%s%s", prefixfs.Path(menderAppRootDir), appName, ext)
-		err := os.RemoveAll(appDir)
-		if err != nil {
-			m.logger.Warnf("Failed to clear app directory %s: %v", appDir, err)
-		}
-	}
-	m.state.State = menderStateInstalling
-	m.emitRecoverfinished(true, "")
 }
 
 func (me *menderEvent) String() string {
