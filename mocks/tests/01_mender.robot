@@ -12,7 +12,7 @@ Suite Teardown    Clear Environment
 Test Tags  mender
 
 *** Variables ***
-${STATE_DIR}    ${EXECDIR}/tests/mock-mender-state
+${STATE_DIR}    %{MOCK_TEST_STATE_DIR=/tmp/moducop-mock-robot-state}
 ${ASSET_DIR}    ${EXECDIR}/../tests/assets
 ${VIRT_FS}      ${STATE_DIR}/fs
 
@@ -81,30 +81,33 @@ Initial Application Update Shall Pass
     # Log To Console    ${result.stdout}
 
     Should Be Equal As Integers    ${result.rc}    0
-    Should Contain    ${result.stdout}    Installed and committed
+    Should Contain    ${result.stdout}    Installed, but not committed
     
     ${result}=  Run Docker PS WithLabels
     Should Contain  ${result.stdout}    nginx-demo-web-1
     Should Contain  ${result.stdout}    com.docker.compose.project=nginx-demo
     Should Contain  ${result.stdout}    software-version=8f249b9
+    Commit Application
 
 New Application Update Shall Pass
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-a895c3c.mender
     Log To Console    ${result.stderr}
     Log To Console    ${result.stdout}
     Should Be Equal As Integers    ${result.rc}    0
-    Should Contain    ${result.stdout}    Installed and committed
+    Should Contain    ${result.stdout}    Installed, but not committed
     
     ${result}=  Run Docker PS WithLabels
     Should Contain  ${result.stdout}    nginx-demo-web-1
     Should Contain  ${result.stdout}    com.docker.compose.project=nginx-demo
     Should Contain  ${result.stdout}    com.ci4rail.app.software-version=a895c3c
+    Commit Application
     
 Application Error Inject After Stop Old Containers
-    # ensure there is an existing deployed app that can become inconsistent
+    # Ensure there is a committed release to restore.
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-a895c3c.mender
     Should Be Equal As Integers    ${result.rc}    0
 
+    Commit Application
     ${result}=    Run Process   mender-update   err-inject    after-stop-old-containers
     Should Be Equal As Integers    ${result.rc}    0
 
@@ -122,34 +125,24 @@ Application Error Inject After Stop Old Containers
     Log To Console   stdout: ${result.stdout}
     Should Contain    ${result.stdout}${result.stderr}   Update already in progress
 
-    IF    '${MENDER_VERSION}' == '5'
-        ${result}=    Run Process    mender-update    commit
-        Should Be Equal As Integers    ${result.rc}    1
-        Should Contain    ${result.stderr}    Cannot commit from this state.
-        ${result}=    Run Process    mender-update    resume
-        Should Be Equal As Integers    ${result.rc}    0
-        Should Contain    ${result.stdout}    Installed and committed.
-        ${result}=    Run Docker PS WithLabels
-        Should Contain    ${result.stdout}    nginx-demo-web-1
-    ELSE
-        # To get out of this situation, we need to commit the update, so that I can try again installation
-        ${result}=    Run Process   mender-update  commit
-        Should Be Equal As Integers    ${result.rc}    0
-        Log To Console  stdout: ${result.stdout}
-        Should Contain    ${result.stdout}    ${INCONSISTENT_OUTPUT}
+    ${result}=    Run Process    mender-update    rollback
+    Should Be Equal As Integers    ${result.rc}    0
+    ${result}=    Run Docker PS WithLabels
+    Should Contain    ${result.stdout}    a895c3c
 
-        # next install is blocked until stale app dirs are removed manually
-        ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
-        Should Be Equal As Integers    ${result.rc}    1
-        Should Contain    ${result.stdout}    ${INCONSISTENT_OUTPUT}
+Application Commit Health Failure Shall Restore Previous Release
+    ${result}=    Run Process    mender-update    install    ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
+    Should Be Equal As Integers    ${result.rc}    0
+    ${result}=    Run Process    mender-update    err-inject    app-health-unhealthy
+    Should Be Equal As Integers    ${result.rc}    0
+    ${result}=    Run Process    mender-update    commit
+    Should Be Equal As Integers    ${result.rc}    1
+    Should Contain    ${result.stdout}    ${COMMIT_ROLLBACK_OUTPUT}
+    Clear Error Injection
+    ${result}=    Run Docker PS WithLabels
+    Should Contain    ${result.stdout}    a895c3c
+    Should Not Contain    ${result.stdout}    8f249b9
 
-        Run Keyword And Ignore Error    Remove Directory    ${VIRT_FS}/data/mender-app/nginx-demo    recursive=True
-        Run Keyword And Ignore Error    Remove Directory    ${VIRT_FS}/data/mender-app/nginx-demo-previous    recursive=True
-
-        ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
-        Should Be Equal As Integers    ${result.rc}    0
-        Should Contain    ${result.stdout}    Installed and committed.
-    END
 
 Core OS Customization Status Shall Reflect Health Check Result
     ${result}=    Run Process    os-customization-set    status
@@ -194,22 +187,20 @@ Core OS Customization Status Shall Reflect Health Check Result
 
 
 *** Keywords ***
+Commit Application
+    ${result}=    Run Process    mender-update    commit
+    Should Be Equal As Integers    ${result.rc}    0
+    Should Contain    ${result.stdout}    Committed.
+
 Setup Environment
-    ${version}=    Get Environment Variable    MOCK_MENDER_VERSION    4
-    Set Suite Variable    ${MENDER_VERSION}    ${version}
-    IF    '${version}' == '5'
-        Set Suite Variable    ${COMMIT_ROLLBACK_OUTPUT}    Committing failed.\nRolled back.
-        Set Suite Variable    ${INCONSISTENT_OUTPUT}    Update Module does not support rollback. System may be in an inconsistent state.
-    ELSE
-        Set Suite Variable    ${COMMIT_ROLLBACK_OUTPUT}    Installation failed. Rolled back modifications.
-        Set Suite Variable    ${INCONSISTENT_OUTPUT}    Installation failed, and Update Module does not support rollback. System may be in an inconsistent state.
-    END
+    Set Suite Variable    ${COMMIT_ROLLBACK_OUTPUT}    Committing failed.\nRolled back.
     ${path}=    Get Environment Variable    PATH
     ${newpath}=    Set Variable    ${EXECDIR}/bin:${path}
     Set Environment Variable    PATH    ${newpath}
     Remove Directory    ${STATE_DIR}    recursive=True
     Set Environment Variable    MOCK_MENDER_STATE_DIR     ${STATE_DIR}
     Run Process  preparefs
+    Create File    ${VIRT_FS}/etc/issue    Moducop-CPU01_Standard-Image_v2.6.0\n
 
 Clear Environment
     Clear Error Injection

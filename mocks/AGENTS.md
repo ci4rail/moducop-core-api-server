@@ -36,66 +36,43 @@ mender-update is used for
 
 They are NOT independent, they share internal state. While one update is installed but not committed, no other update can be installed. If a rootfs update is installed but not committed, application updates cannot be installed, and vice versa.
 
-### Mender version profiles
+### Mender behavior
 
-Set `MOCK_MENDER_VERSION=4` or `MOCK_MENDER_VERSION=5` in the environment
-inherited by the mock commands. Unset or empty selects `4`, preserving the
-existing mock behavior. Other values are rejected before accessing mock state.
-The setting is read on each invocation and is not persisted in `state.json`.
+The mock implements Mender 5.1.0 with the rollback-capable Docker Compose app
+module. `mender-update --version` always reports `5.1.0`. There is no version
+selector or compatibility mode.
 
-```sh
-MOCK_MENDER_VERSION=4 mocks/bin/mender-update install update.mender
-MOCK_MENDER_VERSION=5 mocks/bin/mender-update install update.mender
-```
-
-`mender-update --version` reports `4.0.5` or `5.1.0` for the selected profile.
-The Mender 4 output examples below describe the default profile. Mender 5 mode
-uses the same rootfs, application, customization and reboot simulation, with
-these differences for the existing commands:
-
-- Failure summaries print the operation and disposition on separate lines.
+- Failure summaries print operation and disposition on separate stdout lines.
   Opening/parsing an artifact uses `Streaming failed.`; installation uses
   `Installation failed.`; commit uses `Committing failed.`.
-- Successful rollback after a failed commit prints `Rolled back.` instead of
-  `Rolled back modifications.`.
+- Successful rollback after a failed operation prints `Rolled back.`.
 - Diagnostics and `Could not fulfill request:` messages go to stderr.
 - Refusing an install because an update is pending prints the pending-update
   diagnostic without an installation-failure summary.
-- Commit or rollback without an update prints `No update in progress.` and
-  exits with code 2. The default profile retains the legacy mock behavior
-  (`Nothing to commit.` / `Rolled back.`, exit 0).
+- Commit, rollback, or resume without an update prints `No update in progress.`
+  and exits with code 2.
 - `commit` rejects an interrupted installation with `Cannot commit from this
   state.` on stderr and exit code 1, without changing the saved transaction.
-  Completed installations awaiting commit remain committable.
 - `resume` continues an interrupted installation using its saved artifact path
-  and checkpoint, or commits a transaction already awaiting commit. With no
-  pending transaction it exits with code 2. Mender 4 mode rejects `resume`.
+  and checkpoint, or commits a transaction already awaiting commit.
 
-The Mender 5 profile persists `install_phase` and `resume_artifact` in
-`state.json`. Application checkpoints distinguish stopped containers, renamed
-old files, and extracted new files; resuming skips completed steps and finishes
-with the application's regular automatic commit. Rootfs and customization
-installation checkpoints can rerun installation, which finishes awaiting
-commit. Error injection remains configured until explicitly cleared.
+Transactions persist `install_phase` and `resume_artifact` in `state.json`.
+Application checkpoints distinguish stopped containers, renamed old files, and
+extracted new files. Resuming skips completed steps and commits unless stopped
+before `ArtifactCommit_Enter`. Rootfs and customization installation checkpoints
+can rerun installation, which finishes awaiting commit. Error injection remains
+configured until explicitly cleared.
 
-Legacy state without a phase is treated as awaiting commit for rootfs and
-customization. Legacy interrupted application state is rejected by `commit`;
-without a saved artifact path it cannot be resumed and must be rolled back.
-
-Successful install and commit messages are shared by both profiles. These are
-profiles of the mock's existing command set, not complete Mender clients:
-`resume --stop-before ArtifactCommit_Enter` keeps a rootfs/customization
-transaction awaiting commit, allowing the server to reboot and run health
-checks. Other stop points, `--reboot-exit-code`, and signature enforcement are
-not simulated yet.
+`resume --stop-before ArtifactCommit_Enter` keeps a transaction awaiting commit,
+allowing the server to reboot and run health checks. Other stop points,
+`--reboot-exit-code`, and signature enforcement are not simulated.
 
 The error injection points `post-commit-failed` and `cleanup-failed` report
 failure after saving the completed transaction. They leave the new rootfs or
-application installed and running, and exit with code 1. These can be used with
-both version profiles to verify the API reports a failed deployment without
-undoing a committed update.
+application installed and running, and exit with code 1.
 
-Verify both profiles with `go test ./mocks/...` from the repository root.
+Run `go test ./mocks/...` from the repository root, and `make -C mocks mocks`
+followed by `make -C mocks test-mocks` for the Robot mock suite.
 
 ### mender-update for Rootfs
 
@@ -139,14 +116,16 @@ exit with code 0.
 If device_type is not "moducop-cpu01", print
 ```
 record_id=1 severity=error time="2026-Mar-03 07:43:32.990506" name="Global" msg="Artifact device type doesn't match"
-Installation failed. System not modified.
+Streaming failed.
+System not modified.
 ```
 exit with code 1.
 
 If file does not exist, print
 ```
 record_id=1 severity=error time="2026-Mar-03 07:05:21.952463" name="Global" msg="No such file or directory: Failed to open 'gege' for reading"
-Installation failed. System not modified.
+Streaming failed.
+System not modified.
 Could not fulfill request: No such file or directory: Failed to open 'gege' for reading
 ```
 exit with code 1.
@@ -156,7 +135,8 @@ If mender-update commit is called after install, but before reboot, it should pr
 ```
 record_id=1 severity=info time="2026-Mar-03 07:38:33.551925" name="Global" msg="Update Module output (stderr): Mounted root does not match boot loader environment (/dev/mmcblk0p3)!"
 record_id=2 severity=error time="2026-Mar-03 07:38:33.552810" name="Global" msg="Commit failed: Process returned non-zero exit status: ArtifactCommit: Process exited with status 1"
-Installation failed. Rolled back modifications.
+Committing failed.
+Rolled back.
 ```
 exit with code 1.
 
@@ -169,7 +149,6 @@ exit with code 0.
 mender-update install should fail if there is already an installed but not committed update, and print
 ```
 record_id=1 severity=error time="2026-Mar-03 07:09:26.999642" name="Global" msg="Operation now in progress: Update already in progress. Please commit or roll back first"
-Installation failed. System not modified.
 Could not fulfill request: Operation now in progress: Update already in progress. Please commit or roll back first
 ```
 exit with code 1.
@@ -242,15 +221,14 @@ If environment variable `MOCK_MENDER_KILL_PARENT` is set to `yes`, reboot should
 
 ### mender-update for application updates
 
-On the real target, application updates are done with mender app module https://raw.githubusercontent.com/ci4rail/meta-ci4rail-bsp/refs/heads/scarthgap/recipes-mender/mender-docker-compose/files/app and app-sub-module "docker-compose" https://raw.githubusercontent.com/ci4rail/meta-ci4rail-bsp/refs/heads/scarthgap/recipes-mender/mender-docker-compose/files/docker-compose.
+The mock follows the rollback-capable app module described at
+https://github.com/ci4rail/meta-ci4rail-bsp/blob/scarthgap-secure-boot-mender-app-rollback/recipes-mender/mender-docker-compose/README.md.
 
-Application states are store under /data/mender-app/{application-name]{[-previous]}
-When rollout is made, 
-- old application directory is renamed to {application-name}-previous, 
-- old application is stopped via docker-compose down
-- new application is installed to {application-name},
-- new application is started via docker-compose up -d
-
+Application files live under `/data/mender-app/<application_name>`. The mock
+retains previous manifests and container state for a pending transaction, with
+manifest snapshots under `.transactions/<application_name>/previous`. It stops
+the previous composition before starting the candidate. Snapshots are removed
+when commit or rollback completes. Application transactions survive reboot.
 
 <file>.mender is again a tar file containing
 
@@ -295,36 +273,59 @@ Important labels are only: com.docker.compose.project, and the labels added by t
 
 #### Exact behavior of mender-update for application updates
 
-Successful output shall take at least 5 seconds and print progress every second. After successful installation, it should print
-```
-Update Module doesn't support rollback. Committing immediately.
-Installed and committed.
-```
-(no commit or reboot needed for application updates)
+Successful installation takes at least five seconds, prints progress, checks
+container readiness, and finishes with:
 
-If same version of the application is already installed, it should perform a normal installation.
+```
+Installed, but not committed.
+Use 'commit' to update, or 'rollback' to roll back the update.
+```
 
-If an application OR rootfs update is already installed but not committed, it should print
-```
-Installation failed. System not modified.
-Could not fulfill request: Operation now in progress: Update already in progress. Please commit or roll back first
-```
+Application updates require explicit commit; no reboot is needed. Commit checks
+readiness again before accepting the release. Rollback restores previous manifests
+and containers, or removes the candidate on first installation. Other applications
+are preserved. A pending application blocks all other Mender installations.
+
+The mock reads `/etc/mender/mender-app.conf` from its mirrored filesystem. Defaults
+are `APP_HEALTHCHECK_ENABLED=yes`, `APP_HEALTHCHECK_TIMEOUT=60`, and
+`APP_HEALTHCHECK_INTERVAL=2`. Timeout and interval must be positive integers.
+Settings are saved with the transaction, so configuration changes do not change
+commit behavior. Explicit `no` skips health checks.
+
+Container state is simulated, not real Docker execution. `state.json` container
+entries support `status`, `health`, `paused`, `restarting`, and `exit_code`.
+Ordinary containers must be running, neither paused nor restarting; a nonempty
+health status must be `healthy`. Containers labeled `io.ci4rail.mender.oneshot=true`
+must be exited with code zero. New containers default to running, or successful
+exit for labeled one-shots. Probe commands are not executed. Health injection
+represents the terminal result of polling without waiting the entire timeout.
+The existing limited Compose parser accepts conventional two-space-indented
+service and label blocks; this is not a full YAML/Compose implementation.
+Images, image deltas, volume contents, resolved Compose interpolation snapshots,
+custom `PERSISTENT_STORE`, and Docker image operations are not simulated.
 
 #### Error injection
 
-It shall be possible to inject errors into the mender-update command via an err-inject command.
+The existing interruption points remain:
+- `after-stop-old-containers`
+- `after-renaming-old-application-directory`
+- `after-extracting-new-application-before-starting-new-containers`
 
-* after stopping old containers, mender-update shall exit
-* after renaming old application directory, mender-update shall exit
-* after extracting new application, but before starting new containers, mender-update shall exit
-* docker-compose-up-failed shall simulate a persistent `docker compose up` failure caused by a nonexistent bind-mount source
+They leave the transaction pending. Commit refuses incomplete installations in
+all cases; explicit rollback restores the old release. Mender can resume
+from the saved checkpoint, optionally stopping before commit. `MOCK_MENDER_KILL_PARENT=yes`
+retains the existing parent-process termination behavior.
 
-If environment variable `MOCK_MENDER_KILL_PARENT` is set to `yes`, hitting an injected error shall additionally kill the parent process.
+`docker-compose-up-failed` simulates a rollout error and automatically rolls back.
+The following persistent injections fail readiness at install or commit:
+`app-health-unhealthy`, `app-health-starting`, `app-health-exited`,
+`app-health-paused`, `app-health-restarting`, `app-health-missing`, and
+`app-health-oneshot-failed`. Clear injection with `err-inject ''`.
+A health failure automatically rolls back and returns nonzero. A rollback filesystem
+error retains the pending transaction and snapshot for recovery.
 
-After error injection in application update, the system should reject new updates with "Update already in progress". It shall be possible to commit the pending update, but this commit should leave the system in an inconsistent state.  
-
-The next application install after the commit should output: "Installation failed, and Update Module does not support rollback. System may be in an inconsistent state.". In the real system, the only way out of this situation is to remove all manifest folders data/mender-app/nginx-demo[-previous]. After that, the system should be back to normal and allow new updates.
-
+`post-commit-failed` and `cleanup-failed` run at explicit commit and retain the
+accepted release while reporting failure.
 
 
 ### docker command

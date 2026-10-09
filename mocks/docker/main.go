@@ -57,6 +57,9 @@ func runPS(args []string) error {
 		return err
 	}
 	for _, c := range st.RunningContainers {
+		if c.Status == "exited" {
+			continue
+		}
 		fmt.Printf("%s\t%s\n", c.Name, c.Labels)
 	}
 	return nil

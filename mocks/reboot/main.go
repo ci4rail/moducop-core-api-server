@@ -41,10 +41,7 @@ func main() {
 			} else {
 				fmt.Println("Core OS Customization health checks failed.")
 			}
-		} else {
-			// Non-rootfs pending updates are treated as failed on reboot if uncommitted.
-			mockmender.RollbackImmediate(&st)
-		}
+		} // Application transactions survive reboot for resume or rollback.
 	case trial:
 		// If not committed and rebooted again, rollback.
 		mockmender.RollbackAfterFailedTrial(&st)
