@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 Ci4Rail GmbH
+#
+# SPDX-License-Identifier: Apache-2.0
+
+[Unit]
+Description=Moducop Core API Server (target tests)
+RequiresMountsFor=/data/core-api-server-test
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+ExecStart=/data/core-api-server-test/core-api-server --server.address 0.0.0.0:8090 --log.level debug
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target

@@ -42,7 +42,7 @@ var (
 // extracts the CoreOS version information.
 // It expect in the second line of the file a string like
 // "Moducop-CPU01_Standard-Image_v2.6.0.f457f6d.20260210.1540".
-// The name is aligned to the format contained in the artifact_provides field "rootfs-image.version".
+// The name is aligned with the rootfs-image and bootfit-rootfs artifact version metadata.
 // e.g. name="cpu01-standard" version="v2.6.0.f457f6d.20260210.1540".
 // Returns name, version, error
 func coreOSVersionFromTargetFS() (string, string, error) {
@@ -65,7 +65,7 @@ func coreOsVersionFromIssueLine(line string) (string, string, error) {
 	// extract name and version from strings like:
 	// "Moducop-CPU01_Standard-Image_v2.6.0.f457f6d.20260210.1540"
 	// "Moducop-CPU01_Standard-Image_dirty_v2.7.0.some_dummy_change.40ee657.klaus.20260313.1713"
-	re := regexp.MustCompile(`^[A-Za-z0-9]+-(?P<name>.+)-Image(?:_dirty)?_(?P<version>v\d+\.\d+\.\d+(?:\..+)?)$`)
+	re := regexp.MustCompile(`^[A-Za-z0-9]+-(?P<name>.+)-Image(?:-Non-Secure-Boot)?(?:_dirty)?_(?P<version>v\d+\.\d+\.\d+(?:[.+-][A-Za-z0-9_][A-Za-z0-9_.+-]*)?)$`)
 	matches := re.FindStringSubmatch(line)
 	if matches == nil {
 		return "", "", fmt.Errorf("%w: %s", errInvalidIssueLineFormat, line)

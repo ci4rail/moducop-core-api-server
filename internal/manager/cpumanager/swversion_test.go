@@ -104,3 +104,21 @@ func TestAppVersionFromData(t *testing.T) {
 		})
 	}
 }
+
+func TestNonSecureBootIssueVersions(t *testing.T) {
+	for _, tc := range []struct{ line, version string }{
+		{"Moducop-CPU01_Standard-Image-Non-Secure-Boot_dirty_v3.0.0-alpha.1+2.scarthgap-secure-boot-mender-signing.4407d1c.klaus.20261006.1241", "v3.0.0-alpha.1+2.scarthgap-secure-boot-mender-signing.4407d1c.klaus.20261006.1241"},
+		{"Moducop-CPU01_Standard-Image-Non-Secure-Boot_v3.0.0-alpha.1+4.scarthgap-secure-boot-mender-signing.7b4da3c.20261006.1424", "v3.0.0-alpha.1+4.scarthgap-secure-boot-mender-signing.7b4da3c.20261006.1424"},
+		{"Moducop-CPU01_Standard-Image_v3.0.0-alpha.1+build.42", "v3.0.0-alpha.1+build.42"},
+	} {
+		name, version, err := coreOsVersionFromIssueLine(tc.line)
+		if err != nil || name != "cpu01-standard" || version != tc.version {
+			t.Fatalf("got %q %q %v; want cpu01-standard %q", name, version, err, tc.version)
+		}
+	}
+	for _, line := range []string{"Moducop-CPU01_Standard-Image-Non-Secure-Boot_v3.0.0-", "Moducop-CPU01_Standard-Image-Non-Secure-Boot_v3.0.0-alpha with spaces"} {
+		if _, _, err := coreOsVersionFromIssueLine(line); err == nil {
+			t.Fatalf("accepted %q", line)
+		}
+	}
+}

@@ -19,10 +19,10 @@ ${STATE_DIR}      ${EXECDIR}/../mock-mender-state
 ${MOCK_FS_PATH}   ${STATE_DIR}/fs
 ${SUT_LOGFILE}    ${EXECDIR}/results/sut.log
 ${SIMULATION_MODE}  true
-${COREOS_IMAGE1}  ${ASSET_DIR}/Moducop-CPU01_Standard-Image_v2.7.0.40ee657.20260218.1208.mender
-${COREOS_IMAGE1-VERSION}  v2.7.0.40ee657.20260218.1208
-${COREOS_IMAGE2}  ${ASSET_DIR}/Moducop-CPU01_Standard-Image_dirty_v2.7.0.some_dummy_change.40ee657.klaus.20260313.1713.mender
-${COREOS_IMAGE2-VERSION}  v2.7.0.some_dummy_change.40ee657.klaus.20260313.1713
+${COREOS_IMAGE1}  ${ASSET_DIR}/Moducop-CPU01_Standard-Image-Non-Secure-Boot_dirty_v3.0.0-alpha.1+7.scarthgap-secure-boot-mender-signing.1fc969b.klaus.20261006.2114.mender
+${COREOS_IMAGE1-VERSION}  v3.0.0-alpha.1+7.scarthgap-secure-boot-mender-signing.1fc969b.klaus.20261006.2114
+${COREOS_IMAGE2}  ${ASSET_DIR}/Moducop-CPU01_Standard-Image-Non-Secure-Boot_v3.0.0-alpha.1+8.scarthgap-secure-boot-mender-signing.5d7d004.20261006.2128.mender
+${COREOS_IMAGE2-VERSION}  v3.0.0-alpha.1+8.scarthgap-secure-boot-mender-signing.5d7d004.20261006.2128
 
 *** Keywords ***
 
