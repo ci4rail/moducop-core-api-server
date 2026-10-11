@@ -60,7 +60,9 @@ stateDiagram-v2
 | `RollingBackApplication` | Retry Mender rollback, preserving application files. |
 
 For an application update, one recovery-triggered re-install is permitted. The
-recovery-retry count is persistent. If another recovery would be required, the
+recovery-retry count is persistent. If resuming an interrupted application install
+confirms rollback, the manager retries the saved artifact within this allowance.
+Rollback during a normal install or commit still fails the job. If another recovery would be required, the
 manager emits `JobFinished(failure)` and returns to `Idle`. This prevents a
 deterministic package error, such as a missing Docker Compose bind-mount source,
 from being retried forever.

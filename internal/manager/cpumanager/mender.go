@@ -465,6 +465,14 @@ func (m *menderManager) handleInstallingEvent(event menderEvent) {
 		m.logger.Infof("Recovery install finished while installing. Restarting install")
 		m.runMenderRecoveryInstallInBackGround()
 	case menderEventInstallFinished:
+		// Resume may finish rolling back an installation interrupted by a reboot.
+		// The transaction is now cleared, so retry the saved application artifact
+		// within the persistent recovery budget. Ordinary install failures and
+		// interrupted commits must retain their failure semantics.
+		if m.resumedApplicationInstallRolledBack(event) {
+			m.runMenderRecoveryInstallInBackGround()
+			return
+		}
 		if event.UpdateResult == menderUpdateResultCommittedWithErrors {
 			m.emitJobFinished(false, "Mender committed the update, but subsequent steps failed: "+event.Message)
 			return
@@ -481,6 +489,11 @@ func (m *menderManager) handleInstallingEvent(event menderEvent) {
 		}
 		m.handleInstallFinished(event)
 	}
+}
+
+func (m *menderManager) resumedApplicationInstallRolledBack(event menderEvent) bool {
+	return event.Command == menderCommandResume && m.state.CurrentEntityType == entityTypeApplication &&
+		event.UpdateResult == menderUpdateResultInstallationFailedRolledBack
 }
 
 func (m *menderManager) runMenderRecoveryInstallInBackGround() {

@@ -116,8 +116,11 @@ func TestReserveRecoveryAttempt(t *testing.T) {
 }
 
 func TestRecoveryRetryLimitFinishesJob(t *testing.T) {
-	for _, eventCode := range []menderEventCode{menderEventRecoverFinished} {
-		t.Run(eventCode.String(), func(t *testing.T) {
+	for _, event := range []menderEvent{
+		{Code: menderEventRecoverFinished, Success: true},
+		{Code: menderEventInstallFinished, Command: menderCommandResume, UpdateResult: menderUpdateResultInstallationFailedRolledBack},
+	} {
+		t.Run(event.Code.String(), func(t *testing.T) {
 			var events []menderEvent
 			state := &menderPersistentState{
 				State:             menderStateInstalling,
@@ -135,7 +138,7 @@ func TestRecoveryRetryLimitFinishesJob(t *testing.T) {
 				saveState: func() {},
 			}
 
-			manager.handleInstallingEvent(menderEvent{Code: eventCode, Success: true})
+			manager.handleInstallingEvent(event)
 
 			if len(events) != 1 {
 				t.Fatalf("received %d events, want 1", len(events))
@@ -339,6 +342,10 @@ func TestApplicationLifecycle(t *testing.T) {
 		{"health failure rolled back", menderStateCommitting, menderEvent{Code: menderEventCommitFinished, UpdateResult: menderUpdateResultInstallationFailedRolledBack}, "exit 10", false},
 		{"failed commit rolls back", menderStateCommitting, menderEvent{Code: menderEventCommitFinished, UpdateResult: menderUpdateResultInstallationFailedGeneric}, "[ \"$1\" = rollback ] || exit 10\nprintf 'Rolled back.\\n'", false},
 		{"failed rollback preserves files", menderStateInstalling, menderEvent{Code: menderEventInstallFinished, UpdateResult: menderUpdateResultInstallationFailedSystemInconsistent}, "[ \"$1\" = rollback ] || exit 10\nprintf 'System may be in an inconsistent state.\\n'\nexit 1", false},
+		{"interrupted install rollback retries", menderStateInstalling, menderEvent{Code: menderEventRestarted}, "case \"$1\" in resume) printf 'Rolled back.\\n';; install) printf 'Installed, but not committed.\\n';; commit) printf 'Committed.\\n';; *) exit 10;; esac", true},
+		{"recovery install failure stops", menderStateInstalling, menderEvent{Code: menderEventRestarted}, "case \"$1\" in resume) printf 'Rolled back.\\n';; install) printf 'Installation failed.\\nRolled back.\\n'; exit 1;; *) exit 10;; esac", false},
+		{"ordinary install rollback fails", menderStateInstalling, menderEvent{Code: menderEventInstallFinished, Command: menderCommandInstall, UpdateResult: menderUpdateResultInstallationFailedRolledBack}, "exit 10", false},
+		{"interrupted commit rollback fails", menderStateCommitting, menderEvent{Code: menderEventRestarted}, "[ \"$1\" = resume ] || exit 10\nprintf 'Rolled back.\\n'", false},
 		{"interrupted install resumes", menderStateInstalling, menderEvent{Code: menderEventRestarted}, "[ \"$1\" = resume ] || exit 10\nprintf 'Installed and committed.\\n'", true},
 		{"interrupted recovery resumes", menderStateRecoverInstallCommitting, menderEvent{Code: menderEventRestarted}, "[ \"$1\" = resume ] || exit 10\nprintf 'Installed and committed.\\n'", true},
 		{"interrupted commit resumes", menderStateCommitting, menderEvent{Code: menderEventRestarted}, "[ \"$1\" = resume ] || exit 10\nprintf 'Committed.\\n'", true},
