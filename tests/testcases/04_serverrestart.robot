@@ -26,6 +26,7 @@ Crash During Update Shall be Recovered
     Crash and Restart SUT
 
     ${status_response}=    Wait for Update    ${API_URL}/software/application/${APP_NAME}  timeout=180s
+    Check Deploy Status from Response    ${status_response}    success    Update deployed successfully
     Check Current Version  ${API_URL}/software/application/${APP_NAME} 
     ...   nginx-demo
     ...   8f249b9

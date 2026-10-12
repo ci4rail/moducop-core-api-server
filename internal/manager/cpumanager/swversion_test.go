@@ -7,6 +7,9 @@
 package cpumanager
 
 import (
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -102,5 +105,37 @@ func TestAppVersionFromData(t *testing.T) {
 				t.Errorf("appVersionFromData() gotVersion = %v, want %v", gotVersion, tt.wantVersion)
 			}
 		})
+	}
+}
+
+func TestNonSecureBootIssueVersions(t *testing.T) {
+	for _, tc := range []struct{ line, version string }{
+		{"Moducop-CPU01_Standard-Image-Non-Secure-Boot_dirty_v3.0.0-alpha.1+2.scarthgap-secure-boot-mender-signing.4407d1c.klaus.20261006.1241", "v3.0.0-alpha.1+2.scarthgap-secure-boot-mender-signing.4407d1c.klaus.20261006.1241"},
+		{"Moducop-CPU01_Standard-Image-Non-Secure-Boot_v3.0.0-alpha.1+4.scarthgap-secure-boot-mender-signing.7b4da3c.20261006.1424", "v3.0.0-alpha.1+4.scarthgap-secure-boot-mender-signing.7b4da3c.20261006.1424"},
+		{"Moducop-CPU01_Standard-Image_v3.0.0-alpha.1+build.42", "v3.0.0-alpha.1+build.42"},
+	} {
+		name, version, err := coreOsVersionFromIssueLine(tc.line)
+		if err != nil || name != "cpu01-standard" || version != tc.version {
+			t.Fatalf("got %q %q %v; want cpu01-standard %q", name, version, err, tc.version)
+		}
+	}
+	for _, line := range []string{"Moducop-CPU01_Standard-Image-Non-Secure-Boot_v3.0.0-", "Moducop-CPU01_Standard-Image-Non-Secure-Boot_v3.0.0-alpha with spaces"} {
+		if _, _, err := coreOsVersionFromIssueLine(line); err == nil {
+			t.Fatalf("accepted %q", line)
+		}
+	}
+}
+
+func TestListApplicationsExcludesTransactions(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("MOCK_MENDER_STATE_DIR", root)
+	for _, name := range []string{"demo", "other", ".transactions", "demo-previous", "demo-last"} {
+		if err := os.MkdirAll(filepath.Join(root, "fs/data/mender-app", name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	apps, err := listApplicationsFromTargetFS()
+	if err != nil || !reflect.DeepEqual(apps, []string{"demo", "other"}) {
+		t.Fatalf("apps %v, error %v", apps, err)
 	}
 }

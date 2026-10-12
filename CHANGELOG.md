@@ -1,5 +1,4 @@
-## [1.1.4](https://github.com/ci4rail/moducop-core-api-server/compare/v1.1.3...v1.1.4) (2026-03-18)
-
+## [1.1.4]
 
 Initial
 
@@ -12,3 +11,10 @@ Initial
 * io4edge devices not reliably detected on startup -> no scanning happens on demand. Impact: io4edge updates are not automatically restart after a moducop reboot.
 
 
+## [2.0.0]
+
+## Breaking Changes
+
+* Upgrade to moducop images 3.x
+  * No longer supports mender v4. mender v5 is required.
+  * No longer supports old mender application update module. Application update module with rollback support is required.

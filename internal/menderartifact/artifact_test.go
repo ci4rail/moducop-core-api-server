@@ -9,6 +9,7 @@ package menderartifact
 import (
 	"archive/tar"
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -229,5 +230,57 @@ func TestAppVersionFromArtifact(t *testing.T) {
 	expectedVersion := "a895c3c"
 	if version != expectedVersion {
 		t.Errorf("unexpected version: got %s, want %s", version, expectedVersion)
+	}
+}
+
+func TestCoreOSVersionMetadataFormats(t *testing.T) {
+	cases := []struct{ name, key, raw, version string }{
+		{"legacy canonical", "rootfs-image.version", "cpu01-standard-v2.6.0.f457f6d.20260210.1540", "v2.6.0.f457f6d.20260210.1540"},
+		{"legacy image label", "rootfs-image.version", "cpu01-standard-image-dirty_v2.7.0.some_dummy_change-dev", "v2.7.0.some_dummy_change"},
+		{"bootfit dirty", "rootfs-image.bootfit-rootfs.version", "cpu01-standard-image-dirty_v3.0.0-alpha.1+2.scarthgap-secure-boot-mender-signing.4407d1c.klaus.20261006.1241-dev", "v3.0.0-alpha.1+2.scarthgap-secure-boot-mender-signing.4407d1c.klaus.20261006.1241"},
+		{"bootfit clean", "rootfs-image.bootfit-rootfs.version", "cpu01-standard-image-v3.0.0-alpha.1+4.scarthgap-secure-boot-mender-signing.7b4da3c.20261006.1424-dev", "v3.0.0-alpha.1+4.scarthgap-secure-boot-mender-signing.7b4da3c.20261006.1424"},
+		{"canonical prerelease", "rootfs-image.version", "cpu01-standard-v3.0.0-alpha.1+build.42", "v3.0.0-alpha.1+build.42"},
+		{"canonical dev prerelease retained", "rootfs-image.version", "cpu01-standard-v3.0.0-dev", "v3.0.0-dev"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			metadata, err := json.Marshal(HeadersTypeInfo{ArtifactProvides: map[string]any{tc.key: tc.raw}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			header := tarForTest(t, map[string]string{"headers/0000/type-info": string(metadata)})
+			data := tarForTest(t, map[string]string{"header.tar": string(header)})
+			path := filepath.Join(t.TempDir(), "rootfs.mender")
+			if err := os.WriteFile(path, data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			name, version, err := CoreOSVersionFromArtifact(path)
+			if err != nil || name != "cpu01-standard" || version != tc.version {
+				t.Fatalf("got %q %q %v; want cpu01-standard %q", name, version, err, tc.version)
+			}
+		})
+	}
+}
+
+func TestCoreOSVersionMetadataRejectsInvalidValues(t *testing.T) {
+	for _, provides := range []map[string]any{
+		{"rootfs-image.bootfit-rootfs.version": 42},
+		{"rootfs-image.bootfit-rootfs.version": "cpu01-standard-image-not-a-version"},
+		{"rootfs-image.bootfit-rootfs.version": "cpu01-standard-v3.0.0-"},
+		{"rootfs-image.bootfit-rootfs.version": "cpu01-standard-v3.0.0-alpha with spaces"},
+		{"unrelated.version": "v3.0.0"},
+	} {
+		metadata, err := json.Marshal(HeadersTypeInfo{ArtifactProvides: provides})
+		if err != nil {
+			t.Fatal(err)
+		}
+		header := tarForTest(t, map[string]string{"headers/0000/type-info": string(metadata)})
+		path := filepath.Join(t.TempDir(), "invalid.mender")
+		if err := os.WriteFile(path, tarForTest(t, map[string]string{"header.tar": string(header)}), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := CoreOSVersionFromArtifact(path); err == nil {
+			t.Fatalf("accepted invalid metadata: %+v", provides)
+		}
 	}
 }

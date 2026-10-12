@@ -28,7 +28,7 @@ type HeadersTypeInfo struct {
 const rootfsMatchGroups = 3
 
 var (
-	errMissingRootfsImageVersion  = errors.New("artifact_provides missing rootfs-image.version")
+	errMissingRootfsImageVersion  = errors.New("artifact_provides missing rootfs-image.version or rootfs-image.bootfit-rootfs.version")
 	errUnexpectedRootfsVersionTyp = errors.New("unexpected type for rootfs-image.version")
 	errInvalidRootfsVersionFormat = errors.New("invalid format for rootfs-image.version")
 	errUnexpectedRootfsMatches    = errors.New("unexpected regex match groups")
@@ -44,12 +44,12 @@ var (
 
 const headerTarGzName = "header.tar.gz"
 
-var legacyRootfsImageVersionRe = regexp.MustCompile(`^(?P<name>.+)-image(?P<suffix>-dirty)?_(?P<version>v.+?)(?:-dev)?$`)
+var legacyRootfsImageVersionRe = regexp.MustCompile(`^(?P<name>.+)-image(?P<suffix>-dirty)?[_-](?P<version>v.+?)(?:-dev)?$`)
 
 // CoreOSVersionFromArtifact reads the artifact file at the given path and extracts the CoreOS version
 // from the artifact_provides field in the embedded header.tar(.gz) headers/0000/type-info file.
-// It looks for a "provides" info for "rootfs-image.version", it then extracts the name and version
-// from the value.
+// It accepts rootfs-image.version and rootfs-image.bootfit-rootfs.version,
+// normalizing image build names to the device name and deployed version.
 // Returns name, version, error
 func CoreOSVersionFromArtifact(path string) (string, string, error) {
 	info, err := ParseArtifactHeadersTypeInfo(path)
@@ -57,6 +57,9 @@ func CoreOSVersionFromArtifact(path string) (string, string, error) {
 		return "", "", fmt.Errorf("parse artifact headers: %w", err)
 	}
 	provides, ok := info.ArtifactProvides["rootfs-image.version"]
+	if !ok {
+		provides, ok = info.ArtifactProvides["rootfs-image.bootfit-rootfs.version"]
+	}
 	if !ok {
 		return "", "", fmt.Errorf("%w", errMissingRootfsImageVersion)
 	}
@@ -69,7 +72,7 @@ func CoreOSVersionFromArtifact(path string) (string, string, error) {
 
 func coreOsVersionFromRootfsImageVersion(providesStr string) (string, string, error) {
 	// extract name and version from a string like "cpu01-standard-v2.6.0.f457f6d.20260210.1540"
-	re := regexp.MustCompile(`^(?P<name>.+)-(?P<version>v\d+\.\d+\.\d+(?:\..+)?)$`)
+	re := regexp.MustCompile(`^(?P<name>.+)-(?P<version>v\d+\.\d+\.\d+(?:[.+-][A-Za-z0-9_][A-Za-z0-9_.+-]*)?)$`)
 	matches := re.FindStringSubmatch(providesStr)
 	if matches == nil {
 		return "", "", fmt.Errorf("%w: %s", errInvalidRootfsVersionFormat, providesStr)
@@ -336,20 +339,15 @@ func normalizeArtifactProvides(provides map[string]any) {
 		return
 	}
 
-	rawVersion, ok := provides["rootfs-image.version"]
-	if !ok {
-		return
+	for _, key := range []string{"rootfs-image.version", "rootfs-image.bootfit-rootfs.version"} {
+		version, ok := provides[key].(string)
+		if !ok {
+			continue
+		}
+		matches := legacyRootfsImageVersionRe.FindStringSubmatch(version)
+		if matches == nil {
+			continue
+		}
+		provides[key] = matches[1] + matches[2] + "-" + matches[3]
 	}
-
-	version, ok := rawVersion.(string)
-	if !ok {
-		return
-	}
-
-	matches := legacyRootfsImageVersionRe.FindStringSubmatch(version)
-	if matches == nil {
-		return
-	}
-
-	provides["rootfs-image.version"] = matches[1] + matches[2] + "-" + matches[3]
 }

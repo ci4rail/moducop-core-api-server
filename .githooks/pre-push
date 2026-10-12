@@ -5,6 +5,11 @@
 
 echo "Pre-push hook triggered"
 
+# Both the checks below and Git LFS need the ref updates supplied on stdin.
+PUSH_REFS=$(mktemp) || exit 1
+trap 'rm -f "$PUSH_REFS"' EXIT
+cat > "$PUSH_REFS" || exit 1
+
 ZERO_SHA="0000000000000000000000000000000000000000"
 EMPTY_TREE_SHA=$(git hash-object -t tree /dev/null)
 PUSHED_GO_FILES=""
@@ -27,12 +32,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 $GO_FILES"
   fi
   echo "pushed go files: $PUSHED_GO_FILES"
-done
-
-# only lint if Go files have changed
-if [ "$PUSHED_GO_FILES" = "" ]; then
-  exit 0
-fi
+done < "$PUSH_REFS"
 
 # inform about failed linting or testing step
 function failed {
@@ -45,8 +45,11 @@ function failed {
 
 trap 'failed' ERR
 
-# Run linting
-make lint
+# Only lint and test if Go files have changed.
+if [ "$PUSHED_GO_FILES" != "" ]; then
+  make lint
+  make unit-test
+fi
 
-# Run tests
-make unit-test
+# Upload LFS objects even when the push contains no Go changes.
+git lfs pre-push "$@" < "$PUSH_REFS"

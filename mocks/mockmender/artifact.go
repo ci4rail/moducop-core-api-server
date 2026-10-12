@@ -566,6 +566,9 @@ func extractManifestTar(manifestsTar []byte, appManifestDir string) error {
 		if name == "." || name == "" {
 			continue
 		}
+		if name == ".mender-compose.yml" || name == ".mender-images.yml" {
+			return fmt.Errorf("reserved manifest filename: %s", name)
+		}
 		target := filepath.Join(appManifestDir, name)
 		rel, err := filepath.Rel(appManifestDir, target)
 		if err != nil {
@@ -678,8 +681,14 @@ func extractIssueWithDebugfs(ext4ImagePath, issuePath string) error {
 }
 
 func ComposeContainersFromManifest(projectDir, project string) ([]ContainerState, error) {
-	composePath := filepath.Join(projectDir, "manifests", "docker-compose.yaml")
-	b, err := os.ReadFile(composePath)
+	var b []byte
+	var err error
+	for _, name := range []string{"compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"} {
+		b, err = os.ReadFile(filepath.Join(projectDir, "manifests", name))
+		if !os.IsNotExist(err) {
+			break
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -708,7 +717,12 @@ func ComposeContainersFromManifest(projectDir, project string) ([]ContainerState
 			labelParts = append(labelParts, fmt.Sprintf("%s=%s", key, val))
 		}
 
+		status := "running"
+		if normalizeLabelValue(labels["io.ci4rail.mender.oneshot"]) == "true" {
+			status = "exited"
+		}
 		containers = append(containers, ContainerState{
+			Status: status,
 			Name:   fmt.Sprintf("%s-%s-1", project, svc),
 			Labels: strings.Join(labelParts, ","),
 		})

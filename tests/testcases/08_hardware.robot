@@ -21,7 +21,7 @@ Get Hardware Info Shall Pass
     ELSE
         Should Be Equal as Strings  ${response.json()['vendor']}    Ci4Rail
         Should Be Equal as Strings  ${response.json()['model']}     S100-MEC01
-        Should Match Regexp         ${response.json()['serial']}    ^[0-9A-F]{5}$
+        Should Match Regexp         ${response.json()['serial']}    ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-4[0-9A-Fa-f]{3}-[89ABab][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$
         Should Be Equal as Numbers  ${response.json()['majorVersion']}    1
         Should Be Equal as Numbers  ${response.json()['variant']}    0
     END

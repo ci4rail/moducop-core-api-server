@@ -129,10 +129,10 @@ func (s menderState) String() string {
 		return "committing"
 	case menderStateRecoverInstallCommitting:
 		return "recover_install_committing"
-	case menderStateRecoverInstallClearApp:
-		return "recover_install_clear_app"
 	case menderStateVerifyingCustomization:
 		return "verifying_customization"
+	case menderStateRollingBackApplication:
+		return "rolling_back_application"
 	case menderStateRollingBackCustomization:
 		return "rolling_back_customization"
 	default:
@@ -166,9 +166,12 @@ func (s *menderState) UnmarshalJSON(data []byte) error {
 	case "recover_install_committing":
 		*s = menderStateRecoverInstallCommitting
 	case "recover_install_clear_app":
-		*s = menderStateRecoverInstallClearApp
+		// Migrate interrupted destructive recovery to safe Mender rollback.
+		*s = menderStateRollingBackApplication
 	case "verifying_customization":
 		*s = menderStateVerifyingCustomization
+	case "rolling_back_application":
+		*s = menderStateRollingBackApplication
 	case "rolling_back_customization":
 		*s = menderStateRollingBackCustomization
 	default:

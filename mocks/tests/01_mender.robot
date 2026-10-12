@@ -12,7 +12,7 @@ Suite Teardown    Clear Environment
 Test Tags  mender
 
 *** Variables ***
-${STATE_DIR}    ${EXECDIR}/tests/mock-mender-state
+${STATE_DIR}    %{MOCK_TEST_STATE_DIR=/tmp/moducop-mock-robot-state}
 ${ASSET_DIR}    ${EXECDIR}/../tests/assets
 ${VIRT_FS}      ${STATE_DIR}/fs
 
@@ -57,23 +57,23 @@ Update shall be refused if update in progress
     # try to install again without rebooting first, should be refused
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/Moducop-CPU01_Standard-Image_v2.7.0.40ee657.20260218.1208.mender
     Should Be Equal As Integers    ${result.rc}    1
-    Should Contain    ${result.stdout}   Update already in progress
+    Should Contain    ${result.stdout}${result.stderr}   Update already in progress
     # try to install app update, should also be refused
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
     Should Be Equal As Integers    ${result.rc}    1
-    Should Contain    ${result.stdout}   Update already in progress
+    Should Contain    ${result.stdout}${result.stderr}   Update already in progress
 
 Commit Rootfs Without Reboot Shall Cause Rollback
     ${result}=    Run Process   mender-update  commit
     Should Be Equal As Integers    ${result.rc}    1
-    Should Contain    ${result.stdout}   Installation failed. Rolled back modifications.
+    Should Contain    ${result.stdout}   ${COMMIT_ROLLBACK_OUTPUT}
     ${content}=    Get File        ${VIRT_FS}/etc/issue
     Should Contain    ${content}    Moducop-CPU01_Standard-Image_v2.7.0
 
 Update for different Machine Shall be Refused
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/Moducop-CPU01Plus_Standard-Image_v2.7.0.40ee657.20260218.1033.mender
     Should Be Equal As Integers    ${result.rc}    1
-    Should Contain    ${result.stdout}    Artifact device type doesn't match
+    Should Contain    ${result.stdout}${result.stderr}    Artifact device type doesn't match
 
 Initial Application Update Shall Pass
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
@@ -81,30 +81,33 @@ Initial Application Update Shall Pass
     # Log To Console    ${result.stdout}
 
     Should Be Equal As Integers    ${result.rc}    0
-    Should Contain    ${result.stdout}    Installed and committed
+    Should Contain    ${result.stdout}    Installed, but not committed
     
     ${result}=  Run Docker PS WithLabels
     Should Contain  ${result.stdout}    nginx-demo-web-1
     Should Contain  ${result.stdout}    com.docker.compose.project=nginx-demo
     Should Contain  ${result.stdout}    software-version=8f249b9
+    Commit Application
 
 New Application Update Shall Pass
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-a895c3c.mender
     Log To Console    ${result.stderr}
     Log To Console    ${result.stdout}
     Should Be Equal As Integers    ${result.rc}    0
-    Should Contain    ${result.stdout}    Installed and committed
+    Should Contain    ${result.stdout}    Installed, but not committed
     
     ${result}=  Run Docker PS WithLabels
     Should Contain  ${result.stdout}    nginx-demo-web-1
     Should Contain  ${result.stdout}    com.docker.compose.project=nginx-demo
     Should Contain  ${result.stdout}    com.ci4rail.app.software-version=a895c3c
+    Commit Application
     
 Application Error Inject After Stop Old Containers
-    # ensure there is an existing deployed app that can become inconsistent
+    # Ensure there is a committed release to restore.
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-a895c3c.mender
     Should Be Equal As Integers    ${result.rc}    0
 
+    Commit Application
     ${result}=    Run Process   mender-update   err-inject    after-stop-old-containers
     Should Be Equal As Integers    ${result.rc}    0
 
@@ -120,25 +123,26 @@ Application Error Inject After Stop Old Containers
     ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
     Should Be Equal As Integers    ${result.rc}    1
     Log To Console   stdout: ${result.stdout}
-    Should Contain    ${result.stdout}   Update already in progress
+    Should Contain    ${result.stdout}${result.stderr}   Update already in progress
 
-    # To get out of this situation, we need to commit the update, so that I can try again installation
-    ${result}=    Run Process   mender-update  commit
+    ${result}=    Run Process    mender-update    rollback
     Should Be Equal As Integers    ${result.rc}    0
-    Log To Console  stdout: ${result.stdout}
-    Should Contain    ${result.stdout}    Installation failed, and Update Module does not support rollback. System may be in an inconsistent state.
+    ${result}=    Run Docker PS WithLabels
+    Should Contain    ${result.stdout}    a895c3c
 
-    # next install is blocked until stale app dirs are removed manually
-    ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
+Application Commit Health Failure Shall Restore Previous Release
+    ${result}=    Run Process    mender-update    install    ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
+    Should Be Equal As Integers    ${result.rc}    0
+    ${result}=    Run Process    mender-update    err-inject    app-health-unhealthy
+    Should Be Equal As Integers    ${result.rc}    0
+    ${result}=    Run Process    mender-update    commit
     Should Be Equal As Integers    ${result.rc}    1
-    Should Contain    ${result.stdout}    Installation failed, and Update Module does not support rollback. System may be in an inconsistent state.
+    Should Contain    ${result.stdout}    ${COMMIT_ROLLBACK_OUTPUT}
+    Clear Error Injection
+    ${result}=    Run Docker PS WithLabels
+    Should Contain    ${result.stdout}    a895c3c
+    Should Not Contain    ${result.stdout}    8f249b9
 
-    Run Keyword And Ignore Error    Remove Directory    ${VIRT_FS}/data/mender-app/nginx-demo    recursive=True
-    Run Keyword And Ignore Error    Remove Directory    ${VIRT_FS}/data/mender-app/nginx-demo-previous    recursive=True
-
-    ${result}=    Run Process   mender-update  install  ${ASSET_DIR}/app-nginx-demo-moducop-cpu01-linux_arm64-8f249b9.mender
-    Should Be Equal As Integers    ${result.rc}    0
-    Should Contain    ${result.stdout}    Installed and committed.
 
 Core OS Customization Status Shall Reflect Health Check Result
     ${result}=    Run Process    os-customization-set    status
@@ -183,13 +187,20 @@ Core OS Customization Status Shall Reflect Health Check Result
 
 
 *** Keywords ***
+Commit Application
+    ${result}=    Run Process    mender-update    commit
+    Should Be Equal As Integers    ${result.rc}    0
+    Should Contain    ${result.stdout}    Committed.
+
 Setup Environment
+    Set Suite Variable    ${COMMIT_ROLLBACK_OUTPUT}    Committing failed.\nRolled back.
     ${path}=    Get Environment Variable    PATH
     ${newpath}=    Set Variable    ${EXECDIR}/bin:${path}
     Set Environment Variable    PATH    ${newpath}
     Remove Directory    ${STATE_DIR}    recursive=True
     Set Environment Variable    MOCK_MENDER_STATE_DIR     ${STATE_DIR}
     Run Process  preparefs
+    Create File    ${VIRT_FS}/etc/issue    Moducop-CPU01_Standard-Image_v2.6.0\n
 
 Clear Environment
     Clear Error Injection

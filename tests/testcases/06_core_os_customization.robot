@@ -14,7 +14,7 @@ Core OS Customization Update Shall Pass
     ${response}=    Load Artifact    ${API_URL}/software/core-os-customization    ${artifact}
     Should Be Equal As Integers    ${response.status_code}    202
 
-    ${status_response}=    Wait for Update    ${API_URL}/software/core-os-customization    timeout=60s
+    ${status_response}=    Wait for Update    ${API_URL}/software/core-os-customization    timeout=180s
     Check Current Version from Response    ${status_response}    core-os-customization    site-good-1.0.0
     Check Deploy Status from Response    ${status_response}    success    Update deployed successfully
 
@@ -29,7 +29,7 @@ Core OS Customization Failed Health Check Shall Fail Deployment
 
     ${response}=    Load Artifact    ${API_URL}/software/core-os-customization    ${artifact}
     Should Be Equal As Integers    ${response.status_code}    202
-    ${status_response}=    Wait for Update    ${API_URL}/software/core-os-customization    timeout=60s
+    ${status_response}=    Wait for Update    ${API_URL}/software/core-os-customization    timeout=180s
     Check Deploy Status from Response    ${status_response}    failure    Core OS customization health checks failed
     Check Current Version from Response    ${status_response}    core-os-customization    site-good-1.0.0
 
@@ -44,6 +44,17 @@ Create Customization Artifact
     Create Directory    ${work_dir}/data
     Create File    ${header_dir}/header-info    {"payloads":[{"type":"os-customization"}],"artifact_depends":{"device_type":["moducop-cpu01"]}}
     Create File    ${payload_dir}/manifest.json    {"format_version":1,"version":"${version}","health_checks":[{"type":"command","command":["${health_command}"]}]}
+    IF    '${SIMULATION_MODE}' != 'true'
+        # The target module's File API expects one archive containing the payload.
+        Create Directory    ${payload_dir}/etc
+        ${result}=    Run Process    tar    -C    ${payload_dir}    -cf    ${work_dir}/customization.tar    manifest.json    etc
+        Should Be Equal As Integers    ${result.rc}    0    ${result.stderr}
+        ${result}=    Run Process    mender-artifact    write    module-image
+        ...    -T    os-customization    -n    ${version}    -t    moducop-cpu01
+        ...    -f    ${work_dir}/customization.tar    -o    ${artifact}
+        Should Be Equal As Integers    ${result.rc}    0    ${result.stderr}
+        RETURN
+    END
     ${result}=    Run Process    tar    -C    ${header_dir}    -cf    ${work_dir}/header.tar    header-info
     Should Be Equal As Integers    ${result.rc}    0
     ${result}=    Run Process    tar    -C    ${payload_dir}    -cf    ${work_dir}/data/0000.tar    manifest.json

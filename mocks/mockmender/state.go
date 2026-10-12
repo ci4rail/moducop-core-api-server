@@ -27,40 +27,58 @@ const (
 
 const defaultIssueContent = "TDX Wayland with XWayland 7.1.0-devel-20260210154127+build.0 (scarthgap) \\n \\l\nModucop-CPU01_Standard-Image_v2.7.0.40ee657.20260218.1208\n"
 
+// InstallPhase records the mock's durable installation checkpoints.
+const (
+	PhaseInstalling     = "ArtifactInstall"
+	PhaseAppStopped     = "app-stopped"
+	PhaseAppRenamed     = "app-renamed"
+	PhaseAppExtracted   = "app-extracted"
+	PhaseAwaitingCommit = "Before_ArtifactCommit_Enter"
+	PhaseCommitting     = "ArtifactCommit_Enter"
+)
+
 type State struct {
-	ActiveRootfs                    string           `json:"active_rootfs"`
-	OldRootfs                       string           `json:"old_rootfs"`
-	NewRootfs                       string           `json:"new_rootfs"`
-	ActiveIssuePath                 string           `json:"active_issue_path"`
-	OldIssuePath                    string           `json:"old_issue_path"`
-	PendingImage                    string           `json:"pending_image"`
-	PendingExt4Image                string           `json:"pending_ext4_image"`
-	PendingIssuePath                string           `json:"pending_issue_path"`
-	PendingUpdateType               string           `json:"pending_update_type"`
-	PendingCustomizationVersion     string           `json:"pending_customization_version"`
-	ActiveCustomizationSlot         string           `json:"active_customization_slot"`
-	LastGoodCustomizationSlot       string           `json:"last_good_customization_slot"`
-	CandidateCustomizationSlot      string           `json:"candidate_customization_slot"`
-	CandidateCustomizationVersion   string           `json:"candidate_customization_version"`
-	CustomizationCandidateState     string           `json:"customization_candidate_state"`
-	CustomizationCandidateAttempts  int              `json:"customization_candidate_attempts"`
-	CustomizationHealthExpectedPass bool             `json:"customization_health_expected_pass"`
-	CustomizationHealthEvaluated    bool             `json:"customization_health_evaluated"`
-	CustomizationHealthPassed       bool             `json:"customization_health_passed"`
-	ActiveCustomizationVersion      string           `json:"active_customization_version"`
-	PendingAppProject               string           `json:"pending_app_project"`
-	PreviousAppProject              string           `json:"previous_app_project"`
-	Stage                           string           `json:"stage"`
-	CommittedRootfs                 string           `json:"committed_rootfs"`
-	CommittedIssuePath              string           `json:"committed_issue_path"`
-	RunningContainers               []ContainerState `json:"running_containers"`
-	ErrorInjectPoint                string           `json:"error_inject_point"`
-	InconsistentApp                 string           `json:"inconsistent_app"`
+	AppHealth                       AppHealthSettings `json:"app_health"`
+	PreviousContainers              []ContainerState  `json:"previous_containers,omitempty"`
+	InstallPhase                    string            `json:"install_phase,omitempty"`
+	ResumeArtifact                  string            `json:"resume_artifact,omitempty"`
+	ActiveRootfs                    string            `json:"active_rootfs"`
+	OldRootfs                       string            `json:"old_rootfs"`
+	NewRootfs                       string            `json:"new_rootfs"`
+	ActiveIssuePath                 string            `json:"active_issue_path"`
+	OldIssuePath                    string            `json:"old_issue_path"`
+	PendingImage                    string            `json:"pending_image"`
+	PendingExt4Image                string            `json:"pending_ext4_image"`
+	PendingIssuePath                string            `json:"pending_issue_path"`
+	PendingUpdateType               string            `json:"pending_update_type"`
+	PendingCustomizationVersion     string            `json:"pending_customization_version"`
+	ActiveCustomizationSlot         string            `json:"active_customization_slot"`
+	LastGoodCustomizationSlot       string            `json:"last_good_customization_slot"`
+	CandidateCustomizationSlot      string            `json:"candidate_customization_slot"`
+	CandidateCustomizationVersion   string            `json:"candidate_customization_version"`
+	CustomizationCandidateState     string            `json:"customization_candidate_state"`
+	CustomizationCandidateAttempts  int               `json:"customization_candidate_attempts"`
+	CustomizationHealthExpectedPass bool              `json:"customization_health_expected_pass"`
+	CustomizationHealthEvaluated    bool              `json:"customization_health_evaluated"`
+	CustomizationHealthPassed       bool              `json:"customization_health_passed"`
+	ActiveCustomizationVersion      string            `json:"active_customization_version"`
+	PendingAppProject               string            `json:"pending_app_project"`
+	PreviousAppProject              string            `json:"previous_app_project"`
+	Stage                           string            `json:"stage"`
+	CommittedRootfs                 string            `json:"committed_rootfs"`
+	CommittedIssuePath              string            `json:"committed_issue_path"`
+	RunningContainers               []ContainerState  `json:"running_containers"`
+	ErrorInjectPoint                string            `json:"error_inject_point"`
 }
 
 type ContainerState struct {
-	Name   string `json:"name"`
-	Labels string `json:"labels"`
+	Status     string `json:"status,omitempty"`
+	Health     string `json:"health,omitempty"`
+	ExitCode   int    `json:"exit_code,omitempty"`
+	Paused     bool   `json:"paused,omitempty"`
+	Restarting bool   `json:"restarting,omitempty"`
+	Name       string `json:"name"`
+	Labels     string `json:"labels"`
 }
 
 type UpdateType string
@@ -73,6 +91,8 @@ const (
 )
 
 const (
+	ErrInjectPostCommitFailed        = "post-commit-failed"
+	ErrInjectCleanupFailed           = "cleanup-failed"
 	ErrInjectNone                    = ""
 	ErrInjectAfterStopOldContainers  = "after-stop-old-containers"
 	ErrInjectAfterRenameOldAppDir    = "after-renaming-old-application-directory"
@@ -204,7 +224,7 @@ func EvaluateCustomizationHealth(s *State, passed bool) {
 }
 
 func CommitCustomization(s *State) {
-	clearCustomizationMenderTransaction(s)
+	clearPendingUpdate(s)
 }
 
 func RollbackCustomization(s *State) {
@@ -213,17 +233,7 @@ func RollbackCustomization(s *State) {
 		s.CandidateCustomizationVersion = ""
 		s.CustomizationCandidateState = "rolled-back"
 	}
-	clearCustomizationMenderTransaction(s)
-}
-
-func clearCustomizationMenderTransaction(s *State) {
-	s.PendingImage = ""
-	s.PendingUpdateType = string(UpdateTypeNone)
-	s.PendingCustomizationVersion = ""
-	s.CustomizationHealthExpectedPass = false
-	s.CustomizationHealthEvaluated = false
-	s.CustomizationHealthPassed = false
-	s.Stage = stageIdle
+	clearPendingUpdate(s)
 }
 
 func TrialBoot(s *State) {
@@ -249,8 +259,6 @@ func RollbackAfterFailedTrial(s *State) {
 		if s.ActiveIssuePath != "" {
 			_ = UpdateIssueMirror(s.ActiveIssuePath)
 		}
-	case UpdateTypeApp:
-		RestorePreviousApp(s)
 	case UpdateTypeCustomization:
 		RollbackCustomization(s)
 		return
@@ -265,8 +273,6 @@ func RollbackImmediate(s *State) {
 			s.ActiveIssuePath = s.OldIssuePath
 			_ = UpdateIssueMirror(s.OldIssuePath)
 		}
-	case UpdateTypeApp:
-		RestorePreviousApp(s)
 	case UpdateTypeCustomization:
 		RollbackCustomization(s)
 		return
@@ -293,6 +299,10 @@ func CommitApp(s *State) {
 }
 
 func clearPendingUpdate(s *State) {
+	s.PreviousContainers = nil
+	s.AppHealth = AppHealthSettings{}
+	s.InstallPhase = ""
+	s.ResumeArtifact = ""
 	s.NewRootfs = ""
 	s.OldRootfs = ""
 	s.OldIssuePath = ""
@@ -414,35 +424,13 @@ func randomUUID() (string, error) {
 		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
 }
 
-func RestorePreviousApp(s *State) {
-	if s.PendingAppProject == "" {
-		s.RunningContainers = nil
-		return
-	}
-	curPath := AppPath(s.PendingAppProject)
-	prevPath := AppPath(fmt.Sprintf("%s-previous", s.PendingAppProject))
-	if s.PreviousAppProject != "" {
-		prevPath = AppPath(s.PreviousAppProject)
-	}
-	if _, err := os.Stat(prevPath); err == nil {
-		_ = os.RemoveAll(curPath)
-		_ = os.Rename(prevPath, curPath)
-		running, runErr := ComposeContainersFromManifest(curPath, s.PendingAppProject)
-		if runErr == nil {
-			s.RunningContainers = running
-			return
-		}
-	}
-	s.RunningContainers = nil
-}
-
 func Stage() (idle, installed, trial string) {
 	return stageIdle, stageInstalled, stageBootedTrial
 }
 
 func IsValidErrInjectPoint(v string) bool {
 	switch v {
-	case ErrInjectNone, ErrInjectAfterStopOldContainers, ErrInjectAfterRenameOldAppDir, ErrInjectAfterExtractBeforeStart, ErrInjectDockerComposeUpFailed:
+	case "app-health-unhealthy", "app-health-starting", "app-health-exited", "app-health-paused", "app-health-restarting", "app-health-missing", "app-health-oneshot-failed", ErrInjectPostCommitFailed, ErrInjectCleanupFailed, ErrInjectNone, ErrInjectAfterStopOldContainers, ErrInjectAfterRenameOldAppDir, ErrInjectAfterExtractBeforeStart, ErrInjectDockerComposeUpFailed:
 		return true
 	default:
 		return false

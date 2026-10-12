@@ -81,3 +81,19 @@ func TestPersistentStateUnmarshalRejectsNumericEnums(t *testing.T) {
 		t.Fatalf("Unmarshal() error = nil, want error")
 	}
 }
+
+func TestApplicationRollbackStatePersistence(t *testing.T) {
+	for _, value := range []string{"rolling_back_application", "recover_install_clear_app"} {
+		var state menderState
+		if err := json.Unmarshal([]byte(`"`+value+`"`), &state); err != nil {
+			t.Fatal(err)
+		}
+		if state != menderStateRollingBackApplication {
+			t.Fatalf("state %v", state)
+		}
+		data, err := json.Marshal(state)
+		if err != nil || string(data) != `"rolling_back_application"` {
+			t.Fatalf("state JSON %s: %v", data, err)
+		}
+	}
+}

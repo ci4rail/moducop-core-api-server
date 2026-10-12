@@ -7,6 +7,8 @@ PWD = $(shell pwd)
 
 # constants
 GOLANGCI_VERSION = 2.11.3
+# Keep lint's Go toolchain compatible with the Go version used to build golangci-lint.
+LINT_GOTOOLCHAIN ?= go1.26.8
 DOCKER_REPO = ghcr.io/ci4rail/go-template
 DOCKER_TAG = latest
 PLATFORMS = linux/amd64,linux/arm64,linux/arm/v7
@@ -48,13 +50,13 @@ $(GOLANGCI_LINT):
 	@mv bin/golangci-lint "$(@)"
 
 lint: fmt $(GOLANGCI_LINT) download ## Lints all code with golangci-lint
-	@$(GOLANGCI_LINT) run ./...
+	@GOTOOLCHAIN=$(LINT_GOTOOLCHAIN) $(GOLANGCI_LINT) run ./...
 
 lint-reports: out/lint.xml
 
 .PHONY: out/lint.xml
 out/lint.xml: $(GOLANGCI_LINT) out download
-	@$(GOLANGCI_LINT) run ./... --out-format checkstyle | tee "$(@)"
+	@GOTOOLCHAIN=$(LINT_GOTOOLCHAIN) $(GOLANGCI_LINT) run ./... --out-format checkstyle | tee "$(@)"
 
 test-with-mocks:
 	@make -C tests mock-test

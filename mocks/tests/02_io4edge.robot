@@ -11,7 +11,7 @@ Suite Setup    Setup Environment
 Test Tags  io4edge
 
 *** Variables ***
-${STATE_DIR}    ${EXECDIR}/tests/mock-mender-state
+${STATE_DIR}    %{MOCK_IO4EDGE_TEST_STATE_DIR=/tmp/moducop-mock-io4edge-state}
 
 *** Test Cases ***
 
@@ -58,8 +58,6 @@ Device Shall Be Temporarily Unavailable During Post-Update Restart
     ...    S100-IUO16-USB-EXT1-UC3
     ...    load-firmware
     ...    ${EXECDIR}/../tests/assets/fw-iou16-00-default-1.0.3.fwpkg
-    ...    stdout=PIPE
-    ...    stderr=PIPE
     Sleep    10s
     Wait Until Keyword Succeeds    5s    1s    Device Firmware Request Shall Fail As Temporarily Unavailable    S100-IUO16-USB-EXT1-UC3
     Scan Shall Not List Device    S100-IUO16-USB-EXT1-UC3
