@@ -203,7 +203,8 @@ func runInstall(_ context.Context, imagePath string) error {
 	}
 }
 
-func installCustomization(st *mockmender.State, imagePath string) error {
+func installCustomization(st *mockmender.State, imagePath string) (err error) {
+	defer func() { err = clearFailedInstallCheckpoint(st, err) }()
 	info, manifest, healthExpectedPass, err := mockmender.ParseCustomizationArtifact(imagePath)
 	if err != nil {
 		printDiagnostic("record_id=1 severity=error time=\"2026-Mar-03 07:05:21.952463\" name=\"Global\" msg=\"%s\"\n", err.Error())
@@ -226,7 +227,8 @@ func installCustomization(st *mockmender.State, imagePath string) error {
 	return nil
 }
 
-func installRootfs(st *mockmender.State, imagePath string) error {
+func installRootfs(st *mockmender.State, imagePath string) (err error) {
+	defer func() { err = clearFailedInstallCheckpoint(st, err) }()
 	info, extractedRootfs, err := mockmender.ParseAndExtractArtifact(imagePath)
 	if err != nil {
 		printDiagnostic("record_id=1 severity=error time=\"2026-Mar-03 07:05:21.952463\" name=\"Global\" msg=\"%s\"\n", err.Error())
@@ -448,6 +450,16 @@ func runResume(stopBeforeCommit bool) error {
 		printRequestError(err.Error())
 		return err
 	}
+}
+
+// Synchronous failures before staging an update leave no transaction to resume.
+// A killed process does not run this cleanup, preserving its durable checkpoint.
+func clearFailedInstallCheckpoint(st *mockmender.State, installErr error) error {
+	if installErr == nil || st.InstallPhase != mockmender.PhaseInstalling {
+		return installErr
+	}
+	mockmender.RollbackImmediate(st)
+	return errors.Join(installErr, mockmender.SaveState(*st))
 }
 
 func checkpoint(st *mockmender.State, imagePath, phase string) error {
