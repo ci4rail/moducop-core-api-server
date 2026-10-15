@@ -74,6 +74,21 @@ func TestCoreOsVersionFromIssueLine(t *testing.T) {
 	}
 }
 
+func TestCoreOsVersionFromIssueLineImageVariants(t *testing.T) {
+	version := "v3.0.0-alpha.1+11.scarthgap-secure-boot-mender-signing.4494c8c.klaus.20261012.1148"
+	for _, suffix := range []string{"", "-Non-Secure-Boot", "-Staging", "-Production"} {
+		for _, dirty := range []string{"", "_dirty"} {
+			t.Run(suffix+dirty, func(t *testing.T) {
+				line := "Moducop-CPU01_Standard-Image" + suffix + dirty + "_" + version
+				gotName, gotVersion, err := coreOsVersionFromIssueLine(line)
+				if err != nil || gotName != "cpu01-standard" || gotVersion != version {
+					t.Fatalf("got %q, %q, %v; want %q, %q, nil", gotName, gotVersion, err, "cpu01-standard", version)
+				}
+			})
+		}
+	}
+}
+
 func TestAppVersionFromData(t *testing.T) {
 	tests := []struct {
 		name        string
