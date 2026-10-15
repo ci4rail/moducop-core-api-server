@@ -18,3 +18,9 @@ Initial
 * Upgrade to moducop images 3.x
   * No longer supports mender v4. mender v5 is required.
   * No longer supports old mender application update module. Application update module with rollback support is required.
+
+## [2.0.1]
+
+### Bug Fixes
+
+* Fixed issue reading core-os version for Staging and Production images
